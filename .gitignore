@@ -1,0 +1,29 @@
+# Ignore built UE assets and cache
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+Autosaves/
+
+# Project-specific config files
+*.suo
+*.user
+*.userprefs
+*.sln
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+
+# Visual Studio workspace
+.vs/
+
+# Mac files
+.DS_Store
+
+# Backup
+Backup/
+
+# Logs
+*.log
