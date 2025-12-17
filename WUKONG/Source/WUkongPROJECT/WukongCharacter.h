@@ -7,6 +7,7 @@
 #include "Animation/AnimInstance.h"
 #include "Engine/EngineTypes.h" // 引擎类型定义
 #include "Engine/DamageEvents.h" // 伤害事件类型定义
+#include "ParagonFengMao.h" // 敌人角色类
 #include "WukongCharacter.generated.h"
 
 /*
@@ -26,6 +27,8 @@ enum class EWukongActionState : uint8
     LightAttack UMETA(DisplayName = "LightAttack"), //  轻攻击连击中
     HeavyCharge UMETA(DisplayName = "HeavyCharge"), //  重攻击蓄力中（暂时保留但不再使用）
     HeavyAttack UMETA(DisplayName = "HeavyAttack"), //  重攻击释放
+    Stun UMETA(DisplayName = "Stun"),           //  定身状态
+    DrinkingPotion UMETA(DisplayName = "DrinkingPotion"), //  喝药状态
 };
 
 //  悟空角色类 - 继承Unreal Engine的基础角色类，添加战斗功能
@@ -120,7 +123,7 @@ protected:
     // ==========================================
     //  输入动作定义 - 玩家按键对应的动作对象
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
-    class UInputAction* MoveAction;        // 🏃 移动（WASD）
+    class UInputAction* MoveAction;        // 🏃 移世 移动（WASD）
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
     class UInputAction* LookAction;        // 👀 视角控制（鼠标移动）
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
@@ -133,6 +136,12 @@ protected:
     class UInputAction* DodgeAction;       // 💨 闪避（F键）
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
     class UInputAction* HeavyAttackAction; // 💥 重攻击（鼠标右键）
+
+    // 新增的输入动作
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    class UInputAction* StunSkillAction;   // 💫 定身技能（Q键）
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    class UInputAction* DrinkPotionAction; // 🧪 喝药（E键）
 
     // 测试功能按键
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
@@ -160,6 +169,19 @@ protected:
     void CancelHeavyCharge();   // 取消重攻击蓄力
     void ExecuteHeavyAttack(float DamageMultiplier); // 执行重攻击（蓄力后的实际攻击逻辑）
     void HeavyAttack();         // 执行重攻击（蓄力后的实际攻击逻辑）
+
+    // 新增的功能函数
+    void StunSkill();       // 执行定身技能
+    void DrinkPotion();     // 执行喝药
+
+    // 定身技能相关函数
+    void ApplyStunToTarget(AActor* Target); // 对目标施加定身效果
+    void WakeUpEnemy(class AParagonFengMao* Enemy); // 加快敌人苏醒
+
+    // 喝药相关函数
+    void StartDrinkingPotion(); // 开始喝药
+    void FinishDrinkingPotion(); // 完成喝药
+    void ApplyPotionEffect(); // 应用药水效果
 
     // 战斗系统函数 - 伤害、死亡、重生
     virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override; // 受伤函数
@@ -224,7 +246,7 @@ protected:
 
     // 开局 / 重生播放的动作蒙太奇
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
-   
+
     UAnimMontage* StartMontage = nullptr;
 
     /*  轻攻击动画 - 每个攻击使用独立的动画文件 */
@@ -267,4 +289,35 @@ protected:
        目前主要用PrimaryMeleeMontage的段落系统 */
     UPROPERTY(EditDefaultsOnly, Category = "Combat")
     TArray<UAnimMontage*> LightComboMontages;
+
+    // 死亡动画
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    UAnimMontage* DeathMontage;     // 死亡动画（可选，没有就用物理效果）
+
+    // 新增的定身技能属性
+    UPROPERTY(EditDefaultsOnly, Category = "StunSkill")
+    float StunSkillDamage;          // 定身技能伤害
+    UPROPERTY(EditDefaultsOnly, Category = "StunSkill")
+    float StunDuration;             // 定身持续时间
+    UPROPERTY(EditDefaultsOnly, Category = "StunSkill")
+    float StunSkillStaminaCost;     // 定身技能消耗体力
+    UPROPERTY(EditDefaultsOnly, Category = "StunSkill")
+    float StunSkillRange;           // 定身技能范围
+    UPROPERTY(EditDefaultsOnly, Category = "StunSkill")
+    UAnimMontage* StunSkillMontage; // 定身技能动画
+
+    // 新增的喝药属性
+    UPROPERTY(EditDefaultsOnly, Category = "Potion")
+    int32 PotionCount;              // 药水数量
+    UPROPERTY(EditDefaultsOnly, Category = "Potion")
+    float InstantHealAmount;        // 瞬间回复血量
+    UPROPERTY(EditDefaultsOnly, Category = "Potion")
+    float OverTimeHealAmount;       // 持续回复血量
+    UPROPERTY(EditDefaultsOnly, Category = "Potion")
+    float OverTimeHealDuration;     // 持续回复时间
+    UPROPERTY(EditDefaultsOnly, Category = "Potion")
+    float OverTimeHealInterval;     // 持续回复间隔
+    UPROPERTY(EditDefaultsOnly, Category = "Potion")
+    UAnimMontage* DrinkPotionMontage; // 喝药动画
+    FTimerHandle PotionHealTimerHandle; // 药水回复计时器
 };

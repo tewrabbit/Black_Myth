@@ -17,7 +17,8 @@
 #include "Engine/World.h" // 用于射线检测
 #include "Kismet/GameplayStatics.h" // 用于GameplayStatics工具函数
 #include "ParagonFengMao.h" // 敌人角色类
-
+#include "GameFramework/CharacterMovementComponent.h" // 角色移动组件
+#include "Components/SkeletalMeshComponent.h" // 骨骼网格体组件（用于物理模拟）
 /*
 ===============================================================================
     🏮 悟空角色系统 - 实现文件
@@ -57,6 +58,13 @@ AWukongCharacter::AWukongCharacter() {
 
     HeavyAttackAction = CreateDefaultSubobject<UInputAction>(TEXT("HeavyAttackAction"));
     HeavyAttackAction->ValueType = EInputActionValueType::Boolean; // 布尔值（右键）
+
+    // 新增的输入动作
+    StunSkillAction = CreateDefaultSubobject<UInputAction>(TEXT("StunSkillAction"));
+    StunSkillAction->ValueType = EInputActionValueType::Boolean;   // 布尔值（Q键）
+
+    DrinkPotionAction = CreateDefaultSubobject<UInputAction>(TEXT("DrinkPotionAction"));
+    DrinkPotionAction->ValueType = EInputActionValueType::Boolean; // 布尔值（E键）
 
     // 测试功能按键
     TestDamageAction = CreateDefaultSubobject<UInputAction>(TEXT("TestDamageAction"));
@@ -121,6 +129,8 @@ AWukongCharacter::AWukongCharacter() {
     InputMappingContext->MapKey(SprintAction, EKeys::LeftShift);        // 冲刺
     InputMappingContext->MapKey(DodgeAction, EKeys::F);                 // 闪避
     InputMappingContext->MapKey(HeavyAttackAction, EKeys::RightMouseButton); // 重攻击
+    InputMappingContext->MapKey(StunSkillAction, EKeys::Q);             // 定身技能
+    InputMappingContext->MapKey(DrinkPotionAction, EKeys::E);           // 喝药
 
     // 测试功能按键映射
     InputMappingContext->MapKey(TestDamageAction, EKeys::T);   // 测试受伤
@@ -247,7 +257,54 @@ AWukongCharacter::AWukongCharacter() {
         DodgeMontage = nullptr; // 如果没有动画就用程序化移动代替
     }
 
- 
+
+    // 💀 加载死亡动画 - 可选的死亡动画资源
+    static ConstructorHelpers::FObjectFinder<UAnimMontage> DeathMontageObj(
+        TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/Death_Montage")
+    );
+
+    if (DeathMontageObj.Succeeded())
+    {
+        DeathMontage = DeathMontageObj.Object;
+        UE_LOG(LogTemp, Warning, TEXT("✅ DeathMontage Loaded OK: %s"), *GetNameSafe(DeathMontage));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ DeathMontage not found, using physics ragdoll"));
+        DeathMontage = nullptr; // 如果没有动画就用物理效果代替
+    }
+
+    // 💫 加载定身技能动画
+    static ConstructorHelpers::FObjectFinder<UAnimMontage> StunSkillMontageObj(
+        TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/no") // 使用轻攻击动画作为替代
+    );
+
+    if (StunSkillMontageObj.Succeeded())
+    {
+        StunSkillMontage = StunSkillMontageObj.Object;
+        UE_LOG(LogTemp, Warning, TEXT("✅ StunSkillMontage Loaded OK: %s"), *GetNameSafe(StunSkillMontage));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ StunSkillMontage not found, using Attack1 as fallback"));
+        StunSkillMontage = Attack1Montage;
+    }
+
+    // 🧪 加载喝药动画
+    static ConstructorHelpers::FObjectFinder<UAnimMontage> DrinkPotionMontageObj(
+        TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/Evade1") // 使用闪避动画作为替代
+    );
+
+    if (DrinkPotionMontageObj.Succeeded())
+    {
+        DrinkPotionMontage = DrinkPotionMontageObj.Object;
+        UE_LOG(LogTemp, Warning, TEXT("✅ DrinkPotionMontage Loaded OK: %s"), *GetNameSafe(DrinkPotionMontage));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ DrinkPotionMontage not found, using DodgeMontage as fallback"));
+        DrinkPotionMontage = DodgeMontage;
+    }
 
     // 🔧 初始化所有游戏属性 - 设置角色的默认数值
     CurrentActionState = EWukongActionState::Idle; // 初始状态为空闲
@@ -260,6 +317,7 @@ AWukongCharacter::AWukongCharacter() {
     HeavyAttackStaminaCost = 30.f;                // 重攻击消耗30点体力
     HeavyAttackDistance = 500.f;                  // 重攻击突进距离
     HeavyAttackDuration = 0.4f;                   // 重攻击突进持续时间
+    StunSkillStaminaCost = 25.f;                  // 定身技能消耗25点体力
 
     // ❤️ 生命值系统初始化
     CurrentHealth = MaxHealth = 200.f;            // 初始和最大生命值都是200
@@ -269,6 +327,7 @@ AWukongCharacter::AWukongCharacter() {
     // ⚔️ 伤害系统初始化
     LightAttackDamage = 20.f;                     // 轻攻击伤害20点
     HeavyAttackBaseDamage = 50.f;                 // 重攻击基础伤害50点
+    StunSkillDamage = 30.f;                       // 定身技能伤害30点
 
     // 🔋 蓄力系统初始化
     CurrentChargeTime = 0.f;                      // 当前蓄力时间
@@ -290,6 +349,17 @@ AWukongCharacter::AWukongCharacter() {
     DodgeCooldown = 0.5f;                         // 闪避冷却0.5秒
     bCanDodge = true;                             // 初始可以闪避
     LastMovementInput = FVector2D::ZeroVector;    // 最后移动输入为零向量
+
+    // 💫 定身技能初始化
+    StunDuration = 3.0f;                          // 定身持续3秒
+    StunSkillRange = 300.f;                       // 定身技能范围300单位
+
+    // 🧪 喝药系统初始化
+    PotionCount = 3;                              // 初始有3瓶药水
+    InstantHealAmount = 50.f;                     // 瞬间回复50点生命值
+    OverTimeHealAmount = 30.f;                    // 持续回复30点生命值
+    OverTimeHealDuration = 5.0f;                  // 持续5秒
+    OverTimeHealInterval = 1.0f;                  // 每1秒回复一次
 }
 
 // 🔄 Tick函数 - 每帧执行的核心逻辑（通常每秒60次）
@@ -377,15 +447,15 @@ void AWukongCharacter::Tick(float DeltaTime) {
         // 检查是否有敌人 - 使用更灵活的方式查找
         TArray<AActor*> FoundEnemies;
         UGameplayStatics::GetAllActorsOfClass(GetWorld(), AParagonFengMao::StaticClass(), FoundEnemies);
-        
+
         // 如果没找到，尝试查找所有Character，看看是否有敌人
         if (FoundEnemies.Num() == 0)
         {
             TArray<AActor*> AllCharacters;
             UGameplayStatics::GetAllActorsOfClass(GetWorld(), ACharacter::StaticClass(), AllCharacters);
-            
+
             UE_LOG(LogTemp, Warning, TEXT("🔍 场景中总共有 %d 个Character角色"), AllCharacters.Num());
-            
+
             // 列出所有Character的信息
             for (AActor* Char : AllCharacters)
             {
@@ -394,17 +464,17 @@ void AWukongCharacter::Tick(float DeltaTime) {
                     FString ClassName = Char->GetClass()->GetName();
                     FString ActorName = Char->GetName();
                     UClass* CharClass = Char->GetClass();
-                    
+
                     // 获取父类信息
                     FString ParentClassName = TEXT("无");
                     if (CharClass && CharClass->GetSuperClass())
                     {
                         ParentClassName = CharClass->GetSuperClass()->GetName();
                     }
-                    
-                    UE_LOG(LogTemp, Warning, TEXT("  📋 Character: %s (类名: %s, 父类: %s)"), 
+
+                    UE_LOG(LogTemp, Warning, TEXT("  📋 Character: %s (类名: %s, 父类: %s)"),
                         *ActorName, *ClassName, *ParentClassName);
-                    
+
                     // 检查是否是ParagonFengMao或其子类
                     bool bIsEnemy = false;
                     if (Char->IsA(AParagonFengMao::StaticClass()))
@@ -427,14 +497,14 @@ void AWukongCharacter::Tick(float DeltaTime) {
                             }
                             CurrentClass = CurrentClass->GetSuperClass();
                         }
-                        
+
                         if (!bIsEnemy)
                         {
                             UE_LOG(LogTemp, Warning, TEXT("    ⚠️ 类名包含FengMao但不是AParagonFengMao的子类！"));
                             UE_LOG(LogTemp, Warning, TEXT("    💡 请确保蓝图类的Parent Class是ParagonFengMao"));
                         }
                     }
-                    
+
                     if (bIsEnemy)
                     {
                         FoundEnemies.Add(Char);
@@ -442,7 +512,7 @@ void AWukongCharacter::Tick(float DeltaTime) {
                 }
             }
         }
-        
+
         if (FoundEnemies.Num() == 0)
         {
             UE_LOG(LogTemp, Warning, TEXT("⚠️ 警告: 场景中没有找到任何封魔敌人(AParagonFengMao)！"));
@@ -455,7 +525,7 @@ void AWukongCharacter::Tick(float DeltaTime) {
             {
                 if (FoundEnemies[i])
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("  🐺 敌人%d: %s (类: %s)"), 
+                    UE_LOG(LogTemp, Warning, TEXT("  🐺 敌人%d: %s (类: %s)"),
                         i + 1, *FoundEnemies[i]->GetName(), *FoundEnemies[i]->GetClass()->GetName());
                 }
             }
@@ -950,7 +1020,6 @@ void AWukongCharacter::Die()
         false
     );
 }
-
 /* 🔄 重生处理 - 角色重生时的逻辑 */
 void AWukongCharacter::Respawn()
 {
@@ -970,10 +1039,8 @@ void AWukongCharacter::Respawn()
 
     // 重置朝向
     SetActorRotation(FRotator::ZeroRotator);
-
     UE_LOG(LogTemp, Warning, TEXT("✅ 重生完成，生命值: %.1f/%.1f"), CurrentHealth, MaxHealth);
 }
-
 /* ⚔️ 对目标造成伤害 - 用于攻击命中时的伤害应用
    @param Damage - 伤害数值
    @param Target - 目标角色 */
@@ -2043,6 +2110,10 @@ void AWukongCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
                     InputMappingContext->MapKey(TestDeathAction, EKeys::Y);
                     InputMappingContext->MapKey(TestRespawnAction, EKeys::U);
                     InputMappingContext->MapKey(TestDetectAction, EKeys::G);
+
+                    // 新增功能按键映射
+                    InputMappingContext->MapKey(StunSkillAction, EKeys::Q);
+                    InputMappingContext->MapKey(DrinkPotionAction, EKeys::E);
                 }
                 Subsystem->AddMappingContext(InputMappingContext, 100);
                 UE_LOG(LogTemp, Warning, TEXT("Runtime IMC applied in Setup. MappingCount=%d"), InputMappingContext->GetMappings().Num());
@@ -2104,9 +2175,273 @@ void AWukongCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
         else {
             UE_LOG(LogTemp, Error, TEXT("❌ TestDetectAction 为空！"));
         }
+
+        // 新增功能绑定
+        if (StunSkillAction) {
+            EnhancedInputComponent->BindAction(StunSkillAction, ETriggerEvent::Started, this, &AWukongCharacter::StunSkill);
+            UE_LOG(LogTemp, Warning, TEXT("🔗 绑定定身技能按键 (Q键)"));
+        }
+        else {
+            UE_LOG(LogTemp, Error, TEXT("❌ StunSkillAction 为空！"));
+        }
+
+        if (DrinkPotionAction) {
+            EnhancedInputComponent->BindAction(DrinkPotionAction, ETriggerEvent::Started, this, &AWukongCharacter::DrinkPotion);
+            UE_LOG(LogTemp, Warning, TEXT("🔗 绑定喝药按键 (E键)"));
+        }
+        else {
+            UE_LOG(LogTemp, Error, TEXT("❌ DrinkPotionAction 为空！"));
+        }
     }
     else
     {
         UE_LOG(LogTemp, Error, TEXT("PlayerInputComponent is NOT EnhancedInputComponent! Type=%s"), *PlayerInputComponent->GetClass()->GetName());
     }
+}
+
+// 执行定身技能
+void AWukongCharacter::StunSkill()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🎯 ===== STUN SKILL TRIGGERED ====="));
+
+    // 检查当前状态是否可以使用技能
+    if (CurrentActionState == EWukongActionState::Stun ||
+        CurrentActionState == EWukongActionState::DrinkingPotion ||
+        CurrentActionState == EWukongActionState::Dodge ||
+        CurrentActionState == EWukongActionState::HeavyAttack) {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 定身技能被阻止: 当前状态不适合"));
+        return;
+    }
+
+    // 🔋 体力检查
+    if (CurrentStamina < StunSkillStaminaCost) {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 定身技能被阻止: 体力不足"));
+        return;
+    }
+
+    // 消耗体力
+    CurrentStamina -= StunSkillStaminaCost;
+    UE_LOG(LogTemp, Warning, TEXT("🔋 消耗体力: %.1f，剩余: %.1f"), StunSkillStaminaCost, CurrentStamina);
+
+    // 设置状态为定身技能使用中
+    CurrentActionState = EWukongActionState::Stun;
+
+    // 检测前方敌人
+    FVector ForwardVector = GetActorForwardVector();
+    FVector StartLocation = GetActorLocation() + FVector(0, 0, 50); // 稍微抬高起点
+    FVector EndLocation = StartLocation + ForwardVector * StunSkillRange;
+
+    // 使用球形重叠检测敌人
+    TArray<FHitResult> HitResults;
+    FCollisionShape CollisionShape = FCollisionShape::MakeSphere(100.f); // 检测半径
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this); // 忽略自己
+
+    bool bHit = GetWorld()->SweepMultiByChannel(
+        HitResults,
+        StartLocation,
+        EndLocation,
+        FQuat::Identity,
+        ECC_Pawn,
+        CollisionShape,
+        QueryParams
+    );
+
+    if (bHit && HitResults.Num() > 0) {
+        UE_LOG(LogTemp, Warning, TEXT("🎯 检测到前方有 %d 个目标"), HitResults.Num());
+
+        // 对每个击中的敌人施加定身效果
+        for (const FHitResult& Hit : HitResults) {
+            if (Hit.GetActor() && Hit.GetActor() != this) {
+                AParagonFengMao* Enemy = Cast<AParagonFengMao>(Hit.GetActor());
+                if (Enemy && !Enemy->bIsDead) {
+                    UE_LOG(LogTemp, Warning, TEXT("💫 对敌人 %s 施加定身效果"), *Enemy->GetName());
+                    ApplyStunToTarget(Enemy);
+                }
+            }
+        }
+    }
+    else {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 前方没有检测到敌人"));
+    }
+
+    // 设置技能结束定时器
+    GetWorldTimerManager().SetTimer(
+        DodgeTimerHandle, // 复用计时器
+        [this]() {
+            if (CurrentActionState == EWukongActionState::Stun) {
+                CurrentActionState = EWukongActionState::Idle;
+                UE_LOG(LogTemp, Warning, TEXT("🏁 定身技能结束，回到空闲状态"));
+            }
+        },
+        1.0f, // 1秒后结束
+        false
+    );
+
+    UE_LOG(LogTemp, Warning, TEXT("✅ ===== STUN SKILL EXECUTED =====\n"));
+}
+
+// 对目标施加定身效果
+void AWukongCharacter::ApplyStunToTarget(AActor* Target)
+{
+    AParagonFengMao* Enemy = Cast<AParagonFengMao>(Target);
+    if (!Enemy || Enemy->bIsDead) {
+        return;
+    }
+
+    // 设置敌人状态为定身
+    Enemy->SetAIState(EFengMaoAIState::Idle); // 设置为空闲状态，停止AI行为
+
+    // 禁用敌人的移动
+    if (Enemy->GetCharacterMovement()) {
+        Enemy->GetCharacterMovement()->DisableMovement();
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("💫 敌人 %s 被定身"), *Enemy->GetName());
+
+    // 设置定身结束定时器
+    FTimerHandle StunTimerHandle;
+    GetWorldTimerManager().SetTimer(
+        StunTimerHandle,
+        [Enemy]() {
+            if (Enemy && !Enemy->bIsDead) {
+                // 恢复敌人的移动
+                if (Enemy->GetCharacterMovement()) {
+                    Enemy->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+                }
+
+                // 恢复AI状态
+                if (Enemy->GetAIState() == EFengMaoAIState::Idle) {
+                    Enemy->SetAIState(EFengMaoAIState::Patrol); // 恢复巡逻状态
+                }
+
+                UE_LOG(LogTemp, Warning, TEXT("💫 敌人 %s 定身结束"), *Enemy->GetName());
+            }
+        },
+        StunDuration,
+        false
+    );
+}
+
+// 加快敌人苏醒
+void AWukongCharacter::WakeUpEnemy(class AParagonFengMao* Enemy)
+{
+    if (!Enemy || Enemy->bIsDead) {
+        return;
+    }
+
+    // 立即恢复敌人的移动
+    if (Enemy->GetCharacterMovement()) {
+        Enemy->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+    }
+
+    // 恢复AI状态
+    if (Enemy->GetAIState() == EFengMaoAIState::Idle) {
+        Enemy->SetAIState(EFengMaoAIState::Patrol); // 恢复巡逻状态
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("💫 敌人 %s 被提前唤醒"), *Enemy->GetName());
+}
+
+// 执行喝药
+void AWukongCharacter::DrinkPotion()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🧪 ===== DRINK POTION TRIGGERED ====="));
+
+    // 检查是否还有药水
+    if (PotionCount <= 0) {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 没有药水了"));
+        return;
+    }
+
+    // 检查当前状态是否可以喝药
+    if (CurrentActionState == EWukongActionState::DrinkingPotion ||
+        CurrentActionState == EWukongActionState::Stun ||
+        CurrentActionState == EWukongActionState::Dodge ||
+        CurrentActionState == EWukongActionState::HeavyAttack) {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 喝药被阻止: 当前状态不适合"));
+        return;
+    }
+
+    // 消耗一瓶药水
+    PotionCount--;
+    UE_LOG(LogTemp, Warning, TEXT("🧪 消耗一瓶药水，剩余: %d瓶"), PotionCount);
+
+    // 设置状态为喝药中
+    CurrentActionState = EWukongActionState::DrinkingPotion;
+
+    // 播放喝药动画
+    if (DrinkPotionMontage) {
+        PlayMontageSafe(DrinkPotionMontage, 1.0f, FName(TEXT("Default")));
+        UE_LOG(LogTemp, Warning, TEXT("🎬 播放喝药动画"));
+    }
+
+    // 立即回复一部分生命值
+    float HealAmount = FMath::Min(InstantHealAmount, MaxHealth - CurrentHealth);
+    CurrentHealth += HealAmount;
+    CurrentHealth = FMath::Min(CurrentHealth, MaxHealth);
+    UE_LOG(LogTemp, Warning, TEXT("💚 瞬间回复 %.1f 生命值，当前生命: %.1f/%.1f"), HealAmount, CurrentHealth, MaxHealth);
+
+    // 设置喝药结束定时器
+    GetWorldTimerManager().SetTimer(
+        DodgeTimerHandle, // 复用计时器
+        [this]() {
+            StartDrinkingPotion();
+        },
+        0.5f, // 0.5秒后开始持续回复
+        false
+    );
+
+    UE_LOG(LogTemp, Warning, TEXT("✅ ===== DRINK POTION EXECUTED =====\n"));
+}
+
+// 开始喝药（持续回复阶段）
+void AWukongCharacter::StartDrinkingPotion()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🧪 开始持续回复生命值"));
+
+    // 计算持续回复次数
+    int32 HealTicks = FMath::CeilToInt(OverTimeHealDuration / OverTimeHealInterval);
+    float HealPerTick = OverTimeHealAmount / HealTicks;
+
+    // 设置持续回复定时器
+    GetWorldTimerManager().SetTimer(
+        PotionHealTimerHandle,
+        [this, HealPerTick]() {
+            if (CurrentHealth < MaxHealth && !bIsDead) {
+                float HealAmount = FMath::Min(HealPerTick, MaxHealth - CurrentHealth);
+                CurrentHealth += HealAmount;
+                CurrentHealth = FMath::Min(CurrentHealth, MaxHealth);
+                UE_LOG(LogTemp, Warning, TEXT("💚 持续回复 %.1f 生命值，当前生命: %.1f/%.1f"), HealAmount, CurrentHealth, MaxHealth);
+            }
+        },
+        OverTimeHealInterval,
+        true, // 循环定时器
+        0.0f // 立即开始
+    );
+
+    // 设置喝药结束定时器
+    GetWorldTimerManager().SetTimer(
+        DodgeTimerHandle, // 复用计时器
+        [this]() {
+            FinishDrinkingPotion();
+        },
+        OverTimeHealDuration,
+        false
+    );
+}
+
+// 完成喝药
+void AWukongCharacter::FinishDrinkingPotion()
+{
+    // 清除持续回复定时器
+    GetWorldTimerManager().ClearTimer(PotionHealTimerHandle);
+
+    // 恢复空闲状态
+    if (CurrentActionState == EWukongActionState::DrinkingPotion) {
+        CurrentActionState = EWukongActionState::Idle;
+        UE_LOG(LogTemp, Warning, TEXT("🧪 喝药结束，回到空闲状态"));
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("🧪 持续回复结束"));
 }

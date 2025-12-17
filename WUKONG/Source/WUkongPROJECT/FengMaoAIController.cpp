@@ -123,11 +123,12 @@ void AFengMaoAIController::OnPerceptionUpdated(const TArray<AActor*>& UpdatedAct
 							FengMao->SetAIState(EFengMaoAIState::Chase);
 						}
 					}
-					else
-					{
-						UE_LOG(LogTemp, Warning, TEXT("🤖 失去玩家视野，返回巡逻"));
-						FengMao->SetAIState(EFengMaoAIState::Patrol);
-					}
+                    else
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("🤖 失去玩家视野，返回巡逻"));
+                        FengMao->TargetPlayer = nullptr;
+                        FengMao->SetAIState(EFengMaoAIState::Patrol);
+                    }
 				}
 				else
 				{
