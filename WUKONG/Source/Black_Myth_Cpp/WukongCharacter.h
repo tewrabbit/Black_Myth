@@ -1,15 +1,19 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimInstance.h"
-#include "Engine/EngineTypes.h" // 引擎类型定义
-#include "Engine/DamageEvents.h" // 伤害事件类型定义
-#include "ParagonFengMao.h" // 敌人角色类
+#include "Engine/EngineTypes.h"
+#include "Engine/DamageEvents.h"
+#include "MyPlayerWidget.h"
+#include "ParagonFengMao.h"  // 🆕 添加敌人头文件
+#include "InputAction.h"//加的
 #include "WukongCharacter.generated.h"
 
+
+class UPauseMenuWidget;
 /*
 ===============================================================================
      悟空角色系统 - 头文件声明
@@ -25,15 +29,29 @@ enum class EWukongActionState : uint8
     Sprint UMETA(DisplayName = "Sprint"),       //  冲刺跑，消耗体力但速度快
     Dodge UMETA(DisplayName = "Dodge"),         //  闪避，短暂无敌并快速移动
     LightAttack UMETA(DisplayName = "LightAttack"), //  轻攻击连击中
-    HeavyCharge UMETA(DisplayName = "HeavyCharge"), //  重攻击蓄力中（暂时保留但不再使用）
+    HeavyCharge UMETA(DisplayName = "HeavyCharge"), //  重攻击蓄力中
     HeavyAttack UMETA(DisplayName = "HeavyAttack"), //  重攻击释放
+    Invisible UMETA(DisplayName = "Invisible"), //  隐身状态
+    TransformStart UMETA(DisplayName = "TransformStart"), //  变身开始
+    Transformed UMETA(DisplayName = "Transformed"), //  变身完成
+    TransformEnd UMETA(DisplayName = "TransformEnd"), //  变身结束
     Stun UMETA(DisplayName = "Stun"),           //  定身状态
     DrinkingPotion UMETA(DisplayName = "DrinkingPotion"), //  喝药状态
 };
 
+// 🆕 碰撞检测类型枚举
+UENUM(BlueprintType)
+enum class EAttackDetectionType : uint8
+{
+    Circle   UMETA(DisplayName = "圆形范围"),
+    Sector   UMETA(DisplayName = "扇形范围"),
+    Line     UMETA(DisplayName = "直线范围"),
+    Sphere   UMETA(DisplayName = "球形范围")
+};
+
 //  悟空角色类 - 继承Unreal Engine的基础角色类，添加战斗功能
 UCLASS()
-class WUKONGPROJECT_API AWukongCharacter : public ACharacter
+class BLACK_MYTH_CPP_API AWukongCharacter : public ACharacter
 {
     GENERATED_BODY()
 
@@ -50,6 +68,9 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
     EWukongActionState CurrentActionState;
 
+    UFUNCTION()
+    void OnPressJ_ShakeCamera();
+
     //  每帧调用 - 处理体力恢复、蓄力计时、动画同步等持续性逻辑
     virtual void Tick(float DeltaTime) override;
 
@@ -59,6 +80,19 @@ public:
     //  控制器相关重载函数
     virtual void PossessedBy(AController* NewController) override;
     virtual void OnRep_Controller() override;
+
+    // 🆕 碰撞检测相关函数
+    UFUNCTION(BlueprintCallable, Category = "Combat|Detection")
+    TArray<AActor*> DetectEnemiesInRange(float Radius, EAttackDetectionType DetectionType = EAttackDetectionType::Circle);
+
+    UFUNCTION(BlueprintCallable, Category = "Combat|Detection")
+    void ApplyDamageToDetectedEnemies(TArray<AActor*> Enemies, float BaseDamage, bool bIsHeavyAttack = false);
+
+    UFUNCTION(BlueprintCallable, Category = "Combat|Detection|Debug")
+    void ShowAttackRangeDebug(float Radius, EAttackDetectionType DetectionType, FColor Color = FColor::Red, float Duration = 2.0f);
+
+    UFUNCTION(BlueprintCallable, Category = "Combat|Detection")
+    void TestDetectionSystem();
 
 protected:
     // ==========================================
@@ -85,7 +119,9 @@ protected:
        必须在构造函数或编辑器中加载，否则无法播放攻击动画 */
     UPROPERTY(EditDefaultsOnly, Category = "Combat")
     UAnimMontage* PrimaryMeleeMontage;
-
+    /*  镜头抖动环节*/
+    UPROPERTY()
+    UInputAction* CameraShakeAction;
     /*  连击窗口计时器 - 控制连击的缓冲时间
        比如攻击动画结束后0.5秒内按攻击键还能连击 */
     FTimerHandle ComboWindowTimerHandle;
@@ -123,7 +159,7 @@ protected:
     // ==========================================
     //  输入动作定义 - 玩家按键对应的动作对象
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
-    class UInputAction* MoveAction;        // 🏃 移世 移动（WASD）
+    class UInputAction* MoveAction;        // 🏃 移动（WASD）
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
     class UInputAction* LookAction;        // 👀 视角控制（鼠标移动）
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
@@ -136,13 +172,15 @@ protected:
     class UInputAction* DodgeAction;       // 💨 闪避（F键）
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
     class UInputAction* HeavyAttackAction; // 💥 重攻击（鼠标右键）
-
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    class UInputAction* ToggleInvisibilityAction; // 🎭 隐身切换（V键）
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    class UInputAction* TransformAction;   // 🌀 变身（R键）
     // 新增的输入动作
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
     class UInputAction* StunSkillAction;   // 💫 定身技能（Q键）
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
     class UInputAction* DrinkPotionAction; // 🧪 喝药（E键）
-
     // 测试功能按键
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
     class UInputAction* TestDamageAction;   // 🩹 测试受伤（T键）
@@ -153,6 +191,23 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
     class UInputAction* TestDetectAction;   // 👁️ 测试前方检测（G键）
 
+    // 🆕 新增测试碰撞检测按键
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    class UInputAction* TestCollisionAction; // 🎯 测试碰撞检测（H键）
+
+    // 变身粒子效果
+    UPROPERTY(EditDefaultsOnly, Category = "Transform")
+    class UParticleSystem* TransformParticleEffect;
+
+    UPROPERTY(EditAnywhere, Category = "UI")
+    TSubclassOf<class UMyPlayerWidget> PlayerWidgetClass;
+
+    UPROPERTY()
+    class UMyPlayerWidget* MyPlayerHUD;    // 1. 保存 UI 的实例指针
+
+
+    UPROPERTY()
+    TObjectPtr<UPauseMenuWidget> PauseMenuInstance;
     /*  输入映射上下文 - 按键和动作的连接器
        定义"哪个按键触发哪个InputAction" */
     UPROPERTY()
@@ -183,6 +238,50 @@ protected:
     void FinishDrinkingPotion(); // 完成喝药
     void ApplyPotionEffect(); // 应用药水效果
 
+    // ==========================================
+    // 🎭 隐身系统
+    // ==========================================
+    void ToggleInvisibility();               // 切换隐身状态
+    void SetInvisibility(bool bIsInvisible); // 设置隐身状态
+    void EndInvisibilityCooldown();          // 结束隐身冷却
+    void SaveOriginalMaterials();            // 保存原始材质
+
+    // ==========================================
+    // 🌀 变身系统
+    // ==========================================
+    void TriggerTransform();                 // 触发变身
+    void TransformStart();                   // 开始变身
+    void TransformEnd();                     // 结束变身
+    void SpawnTransformParticle();           // 生成变身粒子效果
+
+    // 🆕 碰撞检测辅助函数
+    void ShowDamageNumbers(FVector Location, float Damage, bool bIsCritical = false);
+    void DrawDebugDetectionShape(EAttackDetectionType DetectionType, FVector Center, FVector Extents, FRotator Rotation, FColor Color, float Duration);
+
+
+
+private:
+
+    UPROPERTY()
+    bool bIsInvisible;                       // 是否隐身
+
+    UPROPERTY()
+    bool bCanToggleInvisibility;             // 是否可以切换隐身（冷却检查用）
+
+    UPROPERTY()
+    float InvisibilityCooldown;              // 隐身切换冷却时间
+
+    FTimerHandle InvisibilityCooldownTimerHandle;  // 冷却计时器
+
+    TArray<UMaterialInterface*> OriginalMaterials;  // 保存原始材质
+
+    // 🌀 变身系统变量
+    bool bIsTransformed;                     // 是否已变身
+    float TransformScaleMultiplier;          // 变身大小倍率
+    float TransformDuration;                 // 变身持续时间
+    FTimerHandle TransformTimerHandle;       // 变身计时器
+    FVector OriginalScale;                   // 原始大小
+
     // 战斗系统函数 - 伤害、死亡、重生
     virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override; // 受伤函数
     void Die();                 // 死亡处理
@@ -196,6 +295,13 @@ protected:
     void TestDie();          // 💀 测试死亡
     void TestRespawn();      // 🔄 测试重生
     void TestFrontDetection(); // 👁️ 测试前方是否有目标
+    void ReceiveDamage(float DamageAmount);
+    void useskillslot();
+    void UseSkill(float ManaCost);
+    void OnTogglePauseMenu();
+    void OnToggleInventory();
+    // 🆕 测试碰撞检测
+    void TestCollisionDetection();
 
     //  连击系统函数 - 管理轻攻击的连击逻辑
     void ClearComboQueue();    // 清理连击队列（被打断时调用）
@@ -206,6 +312,11 @@ protected:
     void PreventAnimationBlueprintDivisionByZero(); // 防止除零错误（目前为空函数）
     void FixAnimationBlueprintVariables();          // 同步变量到动画蓝图
 
+    //冷却时间
+
+    // 函数声明
+    void StartHeavyAttackCooldown();
+    void OnHeavyAttackCooldownEnd();
     //  体力系统属性 - 控制角色的"蓝条"
     float CurrentStamina;           // 当前体力值
     float MaxStamina;               // 体力上限
@@ -236,6 +347,11 @@ protected:
     int32 CurrentLightComboIndex;   // 当前连击索引（0-3）
     bool bLightAttackQueued;        // 是否有排队的轻攻击
     bool bIsInvincible;             // 是否处于无敌状态
+    float TransformStaminaCost;
+    // 冷却结束回调函数
+    bool bIsHeavyAttackOnCooldown;
+    FTimerHandle HeavyAttackCooldownTimerHandle;
+    float HeavyAttackCooldownTime;
 
     /*  闪避计时器 - 控制闪避的持续时间和结束 */
     FTimerHandle DodgeTimerHandle;
@@ -243,11 +359,6 @@ protected:
     /*  重攻击动画 - 立即响应的重攻击动画 */
     UPROPERTY(EditDefaultsOnly, Category = "Combat")
     UAnimMontage* HeavyAttackMontage;
-
-    // 开局 / 重生播放的动作蒙太奇
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
-
-    UAnimMontage* StartMontage = nullptr;
 
     /*  轻攻击动画 - 每个攻击使用独立的动画文件 */
     UPROPERTY(EditDefaultsOnly, Category = "Combat")
@@ -289,7 +400,6 @@ protected:
        目前主要用PrimaryMeleeMontage的段落系统 */
     UPROPERTY(EditDefaultsOnly, Category = "Combat")
     TArray<UAnimMontage*> LightComboMontages;
-
     // 死亡动画
     UPROPERTY(EditDefaultsOnly, Category = "Animation")
     UAnimMontage* DeathMontage;     // 死亡动画（可选，没有就用物理效果）
@@ -320,4 +430,38 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category = "Potion")
     UAnimMontage* DrinkPotionMontage; // 喝药动画
     FTimerHandle PotionHealTimerHandle; // 药水回复计时器
+
+    // 🆕 碰撞检测参数
+    UPROPERTY(EditDefaultsOnly, Category = "Combat|Detection")
+    float DefaultAttackRadius = 200.0f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Combat|Detection")
+    float DefaultAttackAngle = 90.0f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Combat|Detection")
+    float HeavyAttackRadiusMultiplier = 1.5f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Combat|Detection")
+    float CriticalHitChance = 0.1f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Combat|Detection")
+    float CriticalHitMultiplier = 1.5f;
+
+    // 🆕 检测到的敌人列表
+    TArray<AActor*> LastDetectedEnemies;
+
+    // 🆕 是否显示调试信息
+    bool bShowDebugVisuals = true;
+
+    // 🆕 内部检测函数
+    TArray<AActor*> CircleDetection(float Radius);
+    TArray<AActor*> SectorDetection(float Radius, float AngleDegrees);
+    TArray<AActor*> LineDetection(float Length, float Width);
+    TArray<AActor*> SphereDetection(float Radius);
+
+    // 🆕 伤害数字相关
+    FTimerHandle DamageNumberTimerHandle;
+    TArray<FVector> DamageNumberLocations;
+    TArray<float> DamageNumberValues;
+    TArray<bool> DamageNumberIsCritical;
 };
