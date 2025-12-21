@@ -69,8 +69,8 @@ public:
 	// AI行为函数
 	void Patrol();
 	void ChasePlayer();
-	void AttackPlayer();
-	void Die();
+	virtual void AttackPlayer();
+	virtual void Die();
 	void TryUseSkill();
 	void DashToTargetAndStrike();
 	void FinishDash();
@@ -96,6 +96,9 @@ public:
 	bool PlayAttackMontage(); // 播放攻击动画
 	bool PlaySkillMontage();  // 播放技能动画
 	bool PlayHeavyAttackMontage(); // 播放重击动画
+	
+	// 扇形判定相关
+	bool IsTargetInFrontSector(AActor* Target, float AngleDegrees = 90.f, float MaxDistance = 150.f);
 
 	// 工具函数
 	void GenerateDefaultPatrolPoints();
@@ -212,6 +215,9 @@ private:
 	FTimerHandle AutoDamageTestTimerHandle;   // 自动测试伤害定时器
 
 public:
+	// 召唤者引用（用于友方识别）
+	AActor* Summoner;
+	
 	// 允许AI控制器访问的目标玩家
 	AActor* TargetPlayer;                      // 目标玩家
 };

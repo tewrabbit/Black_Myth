@@ -539,12 +539,34 @@ float AParagonFengMao::TakeDamage(float DamageAmount, struct FDamageEvent const&
 	}
 	else
 	{
-		// 受伤后进入追逐状态
+		// 受伤后进入追逐状态，但要检查是否是友方单位
 		if (DamageCauser && DamageCauser->IsA(ACharacter::StaticClass()))
 		{
-			TargetPlayer = DamageCauser;
-			UE_LOG(LogTemp, Warning, TEXT("ewolf 锁定攻击者: %s，进入追逐状态"), *DamageCauser->GetName());
-			SetAIState(EFengMaoAIState::Chase);
+			// 检查是否是友方单位
+			bool bIsFriendly = false;
+			AParagonFengMao* DamageFengMao = Cast<AParagonFengMao>(DamageCauser);
+			if (DamageFengMao && Summoner && DamageFengMao->Summoner && Summoner == DamageFengMao->Summoner)
+			{
+				bIsFriendly = true; // 同一召唤者召唤的单位是友方
+			}
+			
+			// 检查伤害来源是否是召唤者本身
+			if (DamageCauser == Summoner)
+			{
+				bIsFriendly = true; // 召唤者是友方
+			}
+			
+			// 如果不是友方单位，则锁定为攻击目标
+			if (!bIsFriendly)
+			{
+				TargetPlayer = DamageCauser;
+				UE_LOG(LogTemp, Warning, TEXT("ewolf 锁定攻击者: %s，进入追逐状态"), *DamageCauser->GetName());
+				SetAIState(EFengMaoAIState::Chase);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("ewolf 忽略友方单位的伤害: %s"), *DamageCauser->GetName());
+			}
 		}
 		else
 		{
@@ -553,6 +575,34 @@ float AParagonFengMao::TakeDamage(float DamageAmount, struct FDamageEvent const&
 	}
 
 	return ActualDamage;
+}
+
+// 扇形判定函数：检查目标是否在角色前方的扇形区域内
+bool AParagonFengMao::IsTargetInFrontSector(AActor* Target, float AngleDegrees, float MaxDistance)
+{
+	if (!Target)
+		return false;
+
+	// 计算到目标的距离
+	FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
+	float DistanceToTarget = ToTarget.Size();
+
+	// 检查距离是否在范围内
+	if (DistanceToTarget > MaxDistance)
+		return false;
+
+	// 计算目标相对于角色前方的角度
+	FVector ForwardVector = GetActorForwardVector();
+	ToTarget.Normalize();
+	ForwardVector.Normalize();
+
+	// 计算夹角的余弦值
+	float DotProduct = FVector::DotProduct(ForwardVector, ToTarget);
+	float AngleRadians = FMath::Acos(DotProduct);
+	float AngleDegreesActual = FMath::RadiansToDegrees(AngleRadians);
+
+	// 检查角度是否在扇形范围内
+	return AngleDegreesActual <= (AngleDegrees / 2.0f);
 }
 
 // 设置AI状态
@@ -939,6 +989,13 @@ void AParagonFengMao::FinishDash()
 	// 如果移动到了目标范围内，造成伤害
 	if (TargetPlayer)
 	{
+		// 检查目标是否在扇形判定范围内（前方120度，距离200）
+		if (!IsTargetInFrontSector(TargetPlayer, 120.f, 200.f))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ewolf 冲刺未命中！目标不在扇形判定范围内"));
+			return;
+		}
+
 		float Distance = FVector::Distance(GetActorLocation(), TargetPlayer->GetActorLocation());
 		UE_LOG(LogTemp, Warning, TEXT("ewolf 冲刺结束，距离: %.1f米"), Distance);
 
@@ -972,6 +1029,13 @@ void AParagonFengMao::PerformAttack()
 		return;
 	}
 
+	// 检查目标是否在扇形判定范围内（前方90度，距离150）
+	if (!IsTargetInFrontSector(TargetPlayer, 90.f, 150.f))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ewolf 攻击未命中！目标不在扇形判定范围内"));
+		return;
+	}
+
 	// 播放攻击动画
 	if (PlayAttackMontage())
 	{
@@ -1000,6 +1064,13 @@ void AParagonFengMao::PerformHeavyAttack()
 	// 确保目标仍然有效
 	if (!TargetPlayer->IsValidLowLevel() || TargetPlayer->IsPendingKillPending())
 	{
+		return;
+	}
+
+	// 检查目标是否在扇形判定范围内（前方90度，距离150）
+	if (!IsTargetInFrontSector(TargetPlayer, 90.f, 150.f))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ewolf 重击未命中！目标不在扇形判定范围内"));
 		return;
 	}
 

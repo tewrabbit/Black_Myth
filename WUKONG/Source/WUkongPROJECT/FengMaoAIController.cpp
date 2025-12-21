@@ -74,14 +74,59 @@ void AFengMaoAIController::OnUnPossess()
 	UE_LOG(LogTemp, Warning, TEXT("🤖 AI Controller unpossessed"));
 }
 
+bool AFengMaoAIController::IsFriendly(AActor* OtherActor) const
+{
+	// 检查参数有效性
+	if (!OtherActor || !GetPawn())
+		return false;
+
+	// 自己总是友方
+	if (OtherActor == GetPawn())
+		return true;
+
+	// 检查是否是敌对目标
+	if (OtherActor == HostileTarget)
+		return false;
+
+	// 获取当前控制的FengMao和对方FengMao
+	AParagonFengMao* ThisFengMao = Cast<AParagonFengMao>(GetPawn());
+	AParagonFengMao* OtherFengMao = Cast<AParagonFengMao>(OtherActor);
+
+	// 如果两者都是FengMao类型的敌人
+	if (ThisFengMao && OtherFengMao)
+	{
+		// 检查是否由同一个召唤者召唤
+		if (ThisFengMao->Summoner && OtherFengMao->Summoner && 
+		    ThisFengMao->Summoner == OtherFengMao->Summoner)
+		{
+			return true; // 同一召唤者召唤的单位是友方
+		}
+		
+		// 检查对方是否是召唤者本身
+		if (OtherActor == ThisFengMao->Summoner)
+		{
+			return true; // 召唤者是友方
+		}
+	}
+
+	// 默认情况下，不是友方
+	return false;
+}
+
+void AFengMaoAIController::SetHostileTarget(AActor* HostileTargetActor)
+{
+	HostileTarget = HostileTargetActor;
+	UE_LOG(LogTemp, Warning, TEXT("🤖 设置敌对目标: %s"), HostileTargetActor ? *HostileTargetActor->GetName() : TEXT("None"));
+}
+
 void AFengMaoAIController::OnPerceptionUpdated(const TArray<AActor*>& UpdatedActors)
 {
 	for (AActor* Actor : UpdatedActors)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("🤖 AI感知更新: 检测到Actor: %s"), *Actor->GetName());
 
-		// 检查是否是玩家
-		if (Actor && Actor->IsA(APawn::StaticClass()) && Actor != GetPawn())
+		// 检查是否是玩家并且不是友方单位
+		if (Actor && Actor->IsA(APawn::StaticClass()) && !IsFriendly(Actor))
 		{
 			AParagonFengMao* FengMao = Cast<AParagonFengMao>(GetPawn());
 			if (FengMao)
@@ -142,7 +187,7 @@ void AFengMaoAIController::OnPerceptionUpdated(const TArray<AActor*>& UpdatedAct
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("🤖 忽略的Actor: %s (不是Pawn或自身)"), *Actor->GetName());
+			UE_LOG(LogTemp, Warning, TEXT("🤖 忽略的Actor: %s (不是Pawn、自身或敌对目标)"), *Actor->GetName());
 		}
 	}
 }
