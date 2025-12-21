@@ -2,13 +2,13 @@
 
 using UnrealBuildTool;
 
-public class WUkongPROJECT : ModuleRules
+public class Black_Myth_Cpp : ModuleRules
 {
-	public WUkongPROJECT(ReadOnlyTargetRules Target) : base(Target)
+	public Black_Myth_Cpp(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "AIModule", "GameplayTasks", "UMG", "NavigationSystem" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput","AIModule", "UMG", "Slate", "SlateCore","GameplayTasks","NavigationSystem" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 

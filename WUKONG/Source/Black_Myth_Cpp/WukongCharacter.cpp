@@ -1,24 +1,36 @@
-#include "WukongCharacter.h" // 引入自己类的声明
-#include "EnhancedInputComponent.h" // 引入增强输入系统的核心组件
-#include "EnhancedInputSubsystems.h" // 引入增强输入系统的核心组件
-#include "GameFramework/CharacterMovementComponent.h" // 引入角色移动组件
-#include "UObject/ConstructorHelpers.h" // 用于C++加载资源的组件
-#include "Animation/AnimInstance.h" // 用于播放动画的组件
-#include "TimerManager.h" // 用于计时器
-#include "InputAction.h" // 输入系统核心
-#include "InputMappingContext.h" // 输入系统核心
-#include "InputModifiers.h" // 输入系统核心（包含 Swizzle/Negate 等）
-#include "Kismet/KismetMathLibrary.h" // 用于数学运算
-#include "GameFramework/Controller.h" // 用于获取控制器
-#include "InputCoreTypes.h" // 保留以确保 EKeys 等可见
-#include "Engine/LocalPlayer.h" // 构造函数
-#include "Animation/AnimInstance.h" // 动画实例
-#include "Components/CapsuleComponent.h" // 胶囊体组件
+﻿#include "WukongCharacter.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Animation/AnimInstance.h"
+#include "TimerManager.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
+#include "InputModifiers.h"
+#include "Kismet/KismetMathLibrary.h"
+#include "GameFramework/Controller.h"
+#include "InputCoreTypes.h"
+#include "Engine/LocalPlayer.h"
+#include "Components/CapsuleComponent.h"
+#include "Engine/World.h"
+#include "InventoryWidget.h"
+#include "SkillSlotWidget.h"
+#include "PauseMenuWidget.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Particles/ParticleSystem.h"
+#include "Particles/ParticleSystemComponent.h"
+#include <Kismet/GameplayStatics.h>
 #include "Engine/World.h" // 用于射线检测
 #include "Kismet/GameplayStatics.h" // 用于GameplayStatics工具函数
 #include "ParagonFengMao.h" // 敌人角色类
 #include "GameFramework/CharacterMovementComponent.h" // 角色移动组件
 #include "Components/SkeletalMeshComponent.h" // 骨骼网格体组件（用于物理模拟）
+#include "DrawDebugHelpers.h" // 🆕 添加调试绘制头文件
+#include "Camera/PlayerCameraManager.h"
+#include "MyCameraModifier.h"
+#include "TimerManager.h"
+#include "Engine/World.h"
 /*
 ===============================================================================
     🏮 悟空角色系统 - 实现文件
@@ -31,33 +43,32 @@ AWukongCharacter::AWukongCharacter() {
     PrimaryActorTick.bCanEverTick = true;
     GetCharacterMovement()->bOrientRotationToMovement = true;
     GetCharacterMovement()->RotationRate = FRotator(0, 540, 0);
-    GetCharacterMovement()->bUseControllerDesiredRotation = true; // 第三人称更常见的配置：由移动方向驱动角色朝向
+    GetCharacterMovement()->bUseControllerDesiredRotation = true;
     bUseControllerRotationPitch = false;
     bUseControllerRotationYaw = false;
     bUseControllerRotationRoll = false;
 
-    // 🎯 创建输入动作对象 - 定义玩家可以做的所有操作
-    // 这些对象会在SetupPlayerInputComponent中绑定到实际的函数
+    // 🎯 创建输入动作对象
     MoveAction = CreateDefaultSubobject<UInputAction>(TEXT("MoveAction"));
-    MoveAction->ValueType = EInputActionValueType::Axis2D;        // XY轴输入（WASD）
+    MoveAction->ValueType = EInputActionValueType::Axis2D;
 
     LookAction = CreateDefaultSubobject<UInputAction>(TEXT("LookAction"));
-    LookAction->ValueType = EInputActionValueType::Axis2D;        // XY轴输入（鼠标移动）
+    LookAction->ValueType = EInputActionValueType::Axis2D;
 
     JumpAction = CreateDefaultSubobject<UInputAction>(TEXT("JumpAction"));
-    JumpAction->ValueType = EInputActionValueType::Boolean;       // 布尔值（按下/释放）
+    JumpAction->ValueType = EInputActionValueType::Boolean;
 
     LightAttackAction = CreateDefaultSubobject<UInputAction>(TEXT("LightAttackAction"));
-    LightAttackAction->ValueType = EInputActionValueType::Boolean; // 布尔值（左键）
+    LightAttackAction->ValueType = EInputActionValueType::Boolean;
 
     SprintAction = CreateDefaultSubobject<UInputAction>(TEXT("SprintAction"));
-    SprintAction->ValueType = EInputActionValueType::Boolean;      // 布尔值（Shift）
+    SprintAction->ValueType = EInputActionValueType::Boolean;
 
     DodgeAction = CreateDefaultSubobject<UInputAction>(TEXT("DodgeAction"));
-    DodgeAction->ValueType = EInputActionValueType::Boolean;       // 布尔值（F键）
+    DodgeAction->ValueType = EInputActionValueType::Boolean;
 
     HeavyAttackAction = CreateDefaultSubobject<UInputAction>(TEXT("HeavyAttackAction"));
-    HeavyAttackAction->ValueType = EInputActionValueType::Boolean; // 布尔值（右键）
+    HeavyAttackAction->ValueType = EInputActionValueType::Boolean;
 
     // 新增的输入动作
     StunSkillAction = CreateDefaultSubobject<UInputAction>(TEXT("StunSkillAction"));
@@ -66,165 +77,134 @@ AWukongCharacter::AWukongCharacter() {
     DrinkPotionAction = CreateDefaultSubobject<UInputAction>(TEXT("DrinkPotionAction"));
     DrinkPotionAction->ValueType = EInputActionValueType::Boolean; // 布尔值（E键）
 
+    // 🎭 隐身动作
+    ToggleInvisibilityAction = CreateDefaultSubobject<UInputAction>(TEXT("ToggleInvisibilityAction"));
+    ToggleInvisibilityAction->ValueType = EInputActionValueType::Boolean;
+
+    // 🌀 变身动作
+    TransformAction = CreateDefaultSubobject<UInputAction>(TEXT("TransformAction"));
+    TransformAction->ValueType = EInputActionValueType::Boolean;
+
     // 测试功能按键
     TestDamageAction = CreateDefaultSubobject<UInputAction>(TEXT("TestDamageAction"));
-    TestDamageAction->ValueType = EInputActionValueType::Boolean;   // 布尔值（T键）
+    TestDamageAction->ValueType = EInputActionValueType::Boolean;
 
     TestDeathAction = CreateDefaultSubobject<UInputAction>(TEXT("TestDeathAction"));
-    TestDeathAction->ValueType = EInputActionValueType::Boolean;    // 布尔值（Y键）
+    TestDeathAction->ValueType = EInputActionValueType::Boolean;
 
     TestRespawnAction = CreateDefaultSubobject<UInputAction>(TEXT("TestRespawnAction"));
-    TestRespawnAction->ValueType = EInputActionValueType::Boolean;  // 布尔值（U键）
+    TestRespawnAction->ValueType = EInputActionValueType::Boolean;
 
     TestDetectAction = CreateDefaultSubobject<UInputAction>(TEXT("TestDetectAction"));
-    TestDetectAction->ValueType = EInputActionValueType::Boolean;   // 布尔值（G键）
+    TestDetectAction->ValueType = EInputActionValueType::Boolean;
 
-    // 🎪 创建输入映射上下文 - 定义按键到动作的映射关系
+    // 🆕 测试碰撞检测按键
+    TestCollisionAction = CreateDefaultSubobject<UInputAction>(TEXT("TestCollisionAction"));
+    TestCollisionAction->ValueType = EInputActionValueType::Boolean;
+
+    // 🎪 创建输入映射上下文
     InputMappingContext = CreateDefaultSubobject<UInputMappingContext>(TEXT("InputMappingContext"));
 
-    // 🗺️ 配置按键映射 - 让键盘按键触发对应的InputAction
-    // 移动系统：WASD映射到MoveAction的不同方向
-    // D键 = +X（右移）
+    // 🗺️ 配置按键映射
     InputMappingContext->MapKey(MoveAction, EKeys::D);
-
-    // A键 = -X（左移，使用Negate修饰器取反）
     {
         auto& AMap = InputMappingContext->MapKey(MoveAction, EKeys::A);
         AMap.Modifiers.Add(CreateDefaultSubobject<UInputModifierNegate>(TEXT("MoveNegateA")));
     }
-
-    // W键 = +Y（前进，使用Swizzle把X轴贡献映射到Y轴）
     {
         auto& WMap = InputMappingContext->MapKey(MoveAction, EKeys::W);
         auto* SwizzleW = CreateDefaultSubobject<UInputModifierSwizzleAxis>(TEXT("MoveSwizzleW"));
-        SwizzleW->Order = EInputAxisSwizzle::YXZ; // X->Y, Y->X, Z->Z
+        SwizzleW->Order = EInputAxisSwizzle::YXZ;
         WMap.Modifiers.Add(SwizzleW);
     }
-
-    // S键 = -Y（后退，先Swizzle再Negate）
     {
         auto& SMap = InputMappingContext->MapKey(MoveAction, EKeys::S);
         auto* SwizzleS = CreateDefaultSubobject<UInputModifierSwizzleAxis>(TEXT("MoveSwizzleS"));
-        SwizzleS->Order = EInputAxisSwizzle::YXZ; // 先把X贡献映射到Y
+        SwizzleS->Order = EInputAxisSwizzle::YXZ;
         SMap.Modifiers.Add(SwizzleS);
-        SMap.Modifiers.Add(CreateDefaultSubobject<UInputModifierNegate>(TEXT("MoveNegateS"))); // 再取负
+        SMap.Modifiers.Add(CreateDefaultSubobject<UInputModifierNegate>(TEXT("MoveNegateS")));
     }
-    // 👀 视角控制映射 - 鼠标移动控制相机
-    // MouseX → 水平旋转（左右看）
-    InputMappingContext->MapKey(LookAction, EKeys::MouseX);
 
-    // MouseY → 垂直旋转（上下看），需要Swizzle映射
+    // 👀 视角控制映射
+    InputMappingContext->MapKey(LookAction, EKeys::MouseX);
     {
         auto& MY = InputMappingContext->MapKey(LookAction, EKeys::MouseY);
         auto* SwizzleY = CreateDefaultSubobject<UInputModifierSwizzleAxis>(TEXT("LookSwizzleY"));
-        SwizzleY->Order = EInputAxisSwizzle::YXZ; // 把鼠标X轴贡献映射到Y轴
+        SwizzleY->Order = EInputAxisSwizzle::YXZ;
         MY.Modifiers.Add(SwizzleY);
-        // 如需反转俯仰方向，可以取消下面的注释
-        // MY.Modifiers.Add(CreateDefaultSubobject<UInputModifierNegate>(TEXT("LookNegateY")));
     }
 
-    // 🎯 其他动作按键映射 - 简单的一对一映射
-    InputMappingContext->MapKey(JumpAction, EKeys::SpaceBar);          // 跳跃
-    InputMappingContext->MapKey(LightAttackAction, EKeys::LeftMouseButton);  // 轻攻击
-    InputMappingContext->MapKey(SprintAction, EKeys::LeftShift);        // 冲刺
-    InputMappingContext->MapKey(DodgeAction, EKeys::F);                 // 闪避
-    InputMappingContext->MapKey(HeavyAttackAction, EKeys::RightMouseButton); // 重攻击
+    // 🎯 其他动作按键映射
+    InputMappingContext->MapKey(JumpAction, EKeys::SpaceBar);
+    InputMappingContext->MapKey(LightAttackAction, EKeys::LeftMouseButton);
+    InputMappingContext->MapKey(SprintAction, EKeys::LeftShift);
+    InputMappingContext->MapKey(DodgeAction, EKeys::F);
+    InputMappingContext->MapKey(HeavyAttackAction, EKeys::RightMouseButton);
+    InputMappingContext->MapKey(ToggleInvisibilityAction, EKeys::V);
+    InputMappingContext->MapKey(TransformAction, EKeys::R);    // 🌀 变身按键
     InputMappingContext->MapKey(StunSkillAction, EKeys::Q);             // 定身技能
     InputMappingContext->MapKey(DrinkPotionAction, EKeys::E);           // 喝药
-
     // 测试功能按键映射
-    InputMappingContext->MapKey(TestDamageAction, EKeys::T);   // 测试受伤
-    InputMappingContext->MapKey(TestDeathAction, EKeys::Y);    // 测试死亡
-    InputMappingContext->MapKey(TestRespawnAction, EKeys::U);  // 测试重生
-    InputMappingContext->MapKey(TestDetectAction, EKeys::G);   // 测试前方检测
+    InputMappingContext->MapKey(TestDamageAction, EKeys::T);
+    InputMappingContext->MapKey(TestDeathAction, EKeys::Y);
+    InputMappingContext->MapKey(TestRespawnAction, EKeys::U);
+    InputMappingContext->MapKey(TestDetectAction, EKeys::G);
+    // 🆕 测试碰撞检测按键映射
+    InputMappingContext->MapKey(TestCollisionAction, EKeys::H);
 
     UE_LOG(LogTemp, Warning, TEXT("Constructor IMC Mapping count=%d"), InputMappingContext->GetMappings().Num());
-    UE_LOG(LogTemp, Warning, TEXT("Actions valid? Move=%d Look=%d Jump=%d Light=%d Sprint=%d Dodge=%d Heavy=%d Test=%d"), MoveAction != nullptr, LookAction != nullptr, JumpAction != nullptr, LightAttackAction != nullptr, SprintAction != nullptr, DodgeAction != nullptr, HeavyAttackAction != nullptr, TestDamageAction != nullptr);
 
     // ==========================================
     // 📦 初始化角色属性和加载动画资源
     // ==========================================
 
     // 🎯 初始化战斗状态变量
-    AtttackMyCount = 0;              // 连击计数从0开始
-    bMyIsAttacking = false;          // 初始不在攻击状态
-    CurrentActionState = EWukongActionState::Idle; // 初始为空闲状态
+    AtttackMyCount = 0;
+    bMyIsAttacking = false;
+    CurrentActionState = EWukongActionState::Idle;
 
-    // 🎬 加载轻攻击连击动画 - 包含4段连击的主蒙太奇文件
-    // ⚠️ 重要：路径必须和你的实际资源路径匹配！
+    // 🎬 加载轻攻击连击动画
     static ConstructorHelpers::FObjectFinder<UAnimMontage> LightMontageObj(
-        TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/PrimaryLightCombo_Montage")
+        TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/PrimaryMelee_MasterMontage")
     );
+
     if (LightMontageObj.Succeeded())
     {
         PrimaryMeleeMontage = LightMontageObj.Object;
         UE_LOG(LogTemp, Warning, TEXT("✅ PrimaryMeleeMontage Loaded OK: %s"), *GetNameSafe(PrimaryMeleeMontage));
-
-        // 🔍 验证动画资源是否包含所需段落
-        if (PrimaryMeleeMontage->CompositeSections.Num() >= 4) {
-            UE_LOG(LogTemp, Warning, TEXT("✅ 动画包含%d个段落，满足连击需求"), PrimaryMeleeMontage->CompositeSections.Num());
-        }
-        else {
-            UE_LOG(LogTemp, Warning, TEXT("⚠️ 动画只包含%d个段落，可能需要添加更多Attack段落"), PrimaryMeleeMontage->CompositeSections.Num());
-        }
     }
     else
     {
         UE_LOG(LogTemp, Error, TEXT("❌ PrimaryMeleeMontage FAILED TO LOAD!"));
-        UE_LOG(LogTemp, Error, TEXT("Please check the path or assign it in Blueprint instead."));
     }
 
-    // === 开局/重生蒙太奇（硬编码加载） ===
-    static ConstructorHelpers::FObjectFinder<UAnimMontage> StartMontageObj(
-        TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/SelectScreen_Start_Montage")
-    );
-
-    if (StartMontageObj.Succeeded())
-    {
-        StartMontage = StartMontageObj.Object;
-        UE_LOG(LogTemp, Warning, TEXT("✅ StartMontage Loaded: %s"), *GetNameSafe(StartMontage));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ Failed to load StartMontage"));
-    }
-
-    //D:\Black_Myth_Cpp\Content\ParagonSunWukong\Characters\Heroes\Wukong\Animations
     // 🎯 加载独立的攻击动画文件
-    // Attack1动画
     static ConstructorHelpers::FObjectFinder<UAnimMontage> Attack1Obj(
         TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/Primary_Melee_A_Slow_Montage")
     );
     if (Attack1Obj.Succeeded()) {
         Attack1Montage = Attack1Obj.Object;
-        UE_LOG(LogTemp, Warning, TEXT("✅ Attack1Montage Loaded: %s"), *GetNameSafe(Attack1Montage));
     }
 
-    // Attack2动画
     static ConstructorHelpers::FObjectFinder<UAnimMontage> Attack2Obj(
         TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/Primary_Melee_B_Slow_Montage")
     );
     if (Attack2Obj.Succeeded()) {
         Attack2Montage = Attack2Obj.Object;
-        UE_LOG(LogTemp, Warning, TEXT("✅ Attack2Montage Loaded: %s"), *GetNameSafe(Attack2Montage));
     }
 
-    // Attack3动画
     static ConstructorHelpers::FObjectFinder<UAnimMontage> Attack3Obj(
         TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/Primary_Melee_C_Slow_Montage")
     );
     if (Attack3Obj.Succeeded()) {
         Attack3Montage = Attack3Obj.Object;
-        UE_LOG(LogTemp, Warning, TEXT("✅ Attack3Montage Loaded: %s"), *GetNameSafe(Attack3Montage));
     }
 
-    // Attack4动画
     static ConstructorHelpers::FObjectFinder<UAnimMontage> Attack4Obj(
         TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/Primary_Melee_D_Slow_Montage")
     );
     if (Attack4Obj.Succeeded()) {
         Attack4Montage = Attack4Obj.Object;
-        UE_LOG(LogTemp, Warning, TEXT("✅ Attack4Montage Loaded: %s"), *GetNameSafe(Attack4Montage));
     }
 
     // 💥 加载重攻击动画
@@ -233,146 +213,105 @@ AWukongCharacter::AWukongCharacter() {
     );
     if (HeavyMontageObj.Succeeded()) {
         HeavyAttackMontage = HeavyMontageObj.Object;
-        UE_LOG(LogTemp, Warning, TEXT("✅ HeavyAttackMontage Loaded: %s"), *GetNameSafe(HeavyAttackMontage));
     }
     else {
-        // 如果找不到重攻击动画，使用第一段轻攻击作为替代
-        UE_LOG(LogTemp, Warning, TEXT("⚠️ HeavyAttackMontage not found, using Attack1 as fallback"));
         HeavyAttackMontage = Attack1Montage;
     }
 
-    // 💨 加载闪避动画 - 可选的闪避动画资源
+    // 💨 加载闪避动画
     static ConstructorHelpers::FObjectFinder<UAnimMontage> DodgeMontageObj(
         TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/Evade1")
     );
-
     if (DodgeMontageObj.Succeeded())
     {
         DodgeMontage = DodgeMontageObj.Object;
-        UE_LOG(LogTemp, Warning, TEXT("✅ DodgeMontage Loaded OK: %s"), *GetNameSafe(DodgeMontage));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("⚠️ DodgeMontage not found, using programmatic dodge"));
-        DodgeMontage = nullptr; // 如果没有动画就用程序化移动代替
     }
 
-
-    // 💀 加载死亡动画 - 可选的死亡动画资源
-    static ConstructorHelpers::FObjectFinder<UAnimMontage> DeathMontageObj(
-        TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/Death_Montage")
-    );
-
-    if (DeathMontageObj.Succeeded())
-    {
-        DeathMontage = DeathMontageObj.Object;
-        UE_LOG(LogTemp, Warning, TEXT("✅ DeathMontage Loaded OK: %s"), *GetNameSafe(DeathMontage));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("⚠️ DeathMontage not found, using physics ragdoll"));
-        DeathMontage = nullptr; // 如果没有动画就用物理效果代替
-    }
-
-    // 💫 加载定身技能动画
-    static ConstructorHelpers::FObjectFinder<UAnimMontage> StunSkillMontageObj(
-        TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/no") // 使用轻攻击动画作为替代
-    );
-
-    if (StunSkillMontageObj.Succeeded())
-    {
-        StunSkillMontage = StunSkillMontageObj.Object;
-        UE_LOG(LogTemp, Warning, TEXT("✅ StunSkillMontage Loaded OK: %s"), *GetNameSafe(StunSkillMontage));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("⚠️ StunSkillMontage not found, using Attack1 as fallback"));
-        StunSkillMontage = Attack1Montage;
-    }
-
-    // 🧪 加载喝药动画
-    static ConstructorHelpers::FObjectFinder<UAnimMontage> DrinkPotionMontageObj(
-        TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/Evade1") // 使用闪避动画作为替代
-    );
-
-    if (DrinkPotionMontageObj.Succeeded())
-    {
-        DrinkPotionMontage = DrinkPotionMontageObj.Object;
-        UE_LOG(LogTemp, Warning, TEXT("✅ DrinkPotionMontage Loaded OK: %s"), *GetNameSafe(DrinkPotionMontage));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("⚠️ DrinkPotionMontage not found, using DodgeMontage as fallback"));
-        DrinkPotionMontage = DodgeMontage;
-    }
-
-    // 🔧 初始化所有游戏属性 - 设置角色的默认数值
-    CurrentActionState = EWukongActionState::Idle; // 初始状态为空闲
+    // 🔧 初始化所有游戏属性
+    CurrentActionState = EWukongActionState::Idle;
 
     // 🔋 体力系统初始化
-    CurrentStamina = MaxStamina = 100.f;          // 初始和最大体力都是100
-    StaminaRecoveryRate = 10.f;                   // 每秒恢复10点体力
-    LightAttackStaminaCost = 10.f;                // 轻攻击消耗10点体力
-    DodgeStaminaCost = 20.f;                      // 闪避消耗20点体力
-    HeavyAttackStaminaCost = 30.f;                // 重攻击消耗30点体力
-    HeavyAttackDistance = 500.f;                  // 重攻击突进距离
-    HeavyAttackDuration = 0.4f;                   // 重攻击突进持续时间
-    StunSkillStaminaCost = 25.f;                  // 定身技能消耗25点体力
+    CurrentStamina = MaxStamina = 100.f;
+    StaminaRecoveryRate = 10.f;
+    LightAttackStaminaCost = 10.f;
+    DodgeStaminaCost = 20.f;
+    HeavyAttackStaminaCost = 30.f;
+    HeavyAttackDistance = 500.f;
+    HeavyAttackDuration = 0.4f;
+    StunSkillStaminaCost = 25.f;
 
     // ❤️ 生命值系统初始化
-    CurrentHealth = MaxHealth = 200.f;            // 初始和最大生命值都是200
-    HealthRecoveryRate = 5.f;                     // 每秒恢复5点生命值
-    bIsDead = false;                              // 初始不死亡
+    CurrentHealth = MaxHealth = 200.f;
+    HealthRecoveryRate = 7.f;
+    bIsDead = false;
 
     // ⚔️ 伤害系统初始化
-    LightAttackDamage = 20.f;                     // 轻攻击伤害20点
-    HeavyAttackBaseDamage = 50.f;                 // 重攻击基础伤害50点
-    StunSkillDamage = 30.f;                       // 定身技能伤害30点
+    LightAttackDamage = 20.f;
+    HeavyAttackBaseDamage = 50.f;
+    StunSkillDamage = 30.f;
 
     // 🔋 蓄力系统初始化
-    CurrentChargeTime = 0.f;                      // 当前蓄力时间
-    MaxChargeTime = 2.f;                          // 最大蓄力时间2秒
-    MinChargeDamageMultiplier = 1.f;              // 最小蓄力伤害倍率
-    MaxChargeDamageMultiplier = 3.f;              // 最大蓄力伤害倍率
-    bIsCharging = false;                          // 初始不处于蓄力状态
+    CurrentChargeTime = 0.f;
+    MaxChargeTime = 2.f;
+    MinChargeDamageMultiplier = 1.f;
+    MaxChargeDamageMultiplier = 3.f;
+    bIsCharging = false;
 
     // ⚔️ 战斗系统初始化
-    LightComboBufferWindow = 1.0f;                // 连击缓冲窗口1秒
-    CurrentLightComboIndex = 0;                   // 连击索引从0开始
-    bLightAttackQueued = false;                   // 初始没有排队的攻击
-    bIsInvincible = false;                        // 初始不处于无敌状态
+    LightComboBufferWindow = 1.0f;
+    CurrentLightComboIndex = 0;
+    bLightAttackQueued = false;
+    bIsInvincible = false;
 
     // 💨 闪避系统初始化
-    DodgeDistance = 300.f;                        // 闪避移动300单位距离
-    DodgeSpeed = 1000.f;                          // 闪避速度（距离/时间）
-    DodgeDuration = 0.5f;                         // 闪避持续0.5秒（无敌时间）
-    DodgeCooldown = 0.5f;                         // 闪避冷却0.5秒
-    bCanDodge = true;                             // 初始可以闪避
-    LastMovementInput = FVector2D::ZeroVector;    // 最后移动输入为零向量
+    DodgeDistance = 300.f;
+    DodgeSpeed = 1000.f;
+    DodgeDuration = 0.5f;
+    DodgeCooldown = 0.5f;
+    bCanDodge = true;
+    LastMovementInput = FVector2D::ZeroVector;
 
     // 💫 定身技能初始化
     StunDuration = 3.0f;                          // 定身持续3秒
-    StunSkillRange = 300.f;                       // 定身技能范围300单位
+    StunSkillRange = 300.f;
+
+    // 🎭 隐身系统初始化
+    bIsInvisible = false;
+    bCanToggleInvisibility = true;
+    InvisibilityCooldown = 0.5f;
+
+    // 🌀 变身系统初始化
+    bIsTransformed = false;
+    TransformScaleMultiplier = 1.5f;     // 放大1.5倍
+    TransformDuration = 10.0f;
 
     // 🧪 喝药系统初始化
-    PotionCount = 3;                              // 初始有3瓶药水
-    InstantHealAmount = 50.f;                     // 瞬间回复50点生命值
+    PotionCount = 0;                              // 初始没有瓶药水
+    InstantHealAmount = 20.f;                     // 瞬间回复10点生命值
     OverTimeHealAmount = 30.f;                    // 持续回复30点生命值
-    OverTimeHealDuration = 5.0f;                  // 持续5秒
-    OverTimeHealInterval = 1.0f;                  // 每1秒回复一次
+    OverTimeHealDuration = 2.5f;                  // 持续2.5秒
+    OverTimeHealInterval = 1.0f;  // 持续1秒
+
+    // 🆕 碰撞检测系统初始化
+    bShowDebugVisuals = true;
+    LastDetectedEnemies.Empty();
+    DamageNumberLocations.Empty();
+    DamageNumberValues.Empty();
+    DamageNumberIsCritical.Empty();
+
+    //变身效果的初始化
+    TransformStaminaCost = 10.0f;
 }
-
-// 🔄 Tick函数 - 每帧执行的核心逻辑（通常每秒60次）
+// 🔄 Tick函数 - 每帧执行的核心逻辑
 void AWukongCharacter::Tick(float DeltaTime) {
-    Super::Tick(DeltaTime); // 调用父类的Tick函数
+    Super::Tick(DeltaTime);
 
-    // 🔍 动画状态调试（开发时使用，发布时可移除）
+    // 🔍 动画状态调试
     if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance()) {
         UAnimMontage* CurrentPlayingMontage = nullptr;
         FName CurrentSection = NAME_None;
         float CurrentPos = 0.0f;
 
-        // 检查哪个攻击动画正在播放
         if (Attack1Montage && AnimInst->Montage_IsPlaying(Attack1Montage)) {
             CurrentPlayingMontage = Attack1Montage;
             CurrentSection = FName(TEXT("Attack1"));
@@ -398,7 +337,6 @@ void AWukongCharacter::Tick(float DeltaTime) {
             CurrentSection = FName(TEXT("HeavyAttack"));
             CurrentPos = AnimInst->Montage_GetPosition(HeavyAttackMontage);
         }
-        // 兼容PrimaryMeleeMontage
         else if (PrimaryMeleeMontage && AnimInst->Montage_IsPlaying(PrimaryMeleeMontage)) {
             CurrentPlayingMontage = PrimaryMeleeMontage;
             CurrentSection = AnimInst->Montage_GetCurrentSection(PrimaryMeleeMontage);
@@ -407,8 +345,6 @@ void AWukongCharacter::Tick(float DeltaTime) {
 
         if (CurrentPlayingMontage) {
             static float LastPos = 0.0f;
-
-            // 只有位置变化明显时才输出，避免日志刷屏
             if (FMath::Abs(CurrentPos - LastPos) > 0.1f) {
                 float TotalLength = CurrentPlayingMontage->GetPlayLength();
                 float Progress = TotalLength > 0.0f ? (CurrentPos / TotalLength) * 100.0f : 0.0f;
@@ -423,19 +359,18 @@ void AWukongCharacter::Tick(float DeltaTime) {
         }
     }
 
-    // 🔋 体力恢复逻辑 - 持续性体力恢复
-    if (CurrentActionState != EWukongActionState::Sprint) { // 冲刺时不恢复体力
-        CurrentStamina += StaminaRecoveryRate * DeltaTime; // 恢复量 = 每秒恢复速率 × 时间间隔
-        CurrentStamina = FMath::Min(CurrentStamina, MaxStamina); // 确保不超过最大值
-    }
+    //// 🔋 体力恢复逻辑
+    //if (CurrentActionState != EWukongActionState::Sprint) {
+    //    CurrentStamina += StaminaRecoveryRate * DeltaTime;
+    //    CurrentStamina = FMath::Min(CurrentStamina, MaxStamina);
+    //}
 
-    // ❤️ 生命值恢复逻辑 - 持续性生命值恢复
-    if (!bIsDead && CurrentHealth < MaxHealth) { // 死亡时不恢复，满了也不恢复
-        CurrentHealth += HealthRecoveryRate * DeltaTime; // 恢复量 = 每秒恢复速率 × 时间间隔
-        CurrentHealth = FMath::Min(CurrentHealth, MaxHealth); // 确保不超过最大值
-    }
+    //// ❤️ 生命值恢复逻辑
+    //if (!bIsDead && CurrentHealth < MaxHealth) {
+    //    CurrentHealth += HealthRecoveryRate * DeltaTime;
+    //    CurrentHealth = FMath::Min(CurrentHealth, MaxHealth);
+    //}
 
-    // 🩺 状态调试信息（每秒输出一次）
     static float DebugTimer = 0.f;
     DebugTimer += DeltaTime;
     if (DebugTimer >= 1.f)
@@ -532,54 +467,51 @@ void AWukongCharacter::Tick(float DeltaTime) {
         }
     }
 
-    // 🔋 蓄力计时器逻辑 - 在蓄力状态下累积时间
+    // 🔋 蓄力计时器逻辑
     if (bIsCharging && CurrentActionState == EWukongActionState::HeavyCharge) {
         CurrentChargeTime += DeltaTime;
-        CurrentChargeTime = FMath::Min(CurrentChargeTime, MaxChargeTime); // 确保不超过最大蓄力时间
-
-        // 可以在这里添加蓄力效果，比如屏幕特效、音效等
-        float ChargeRatio = CurrentChargeTime / MaxChargeTime;
-        UE_LOG(LogTemp, Warning, TEXT("🔋 蓄力中... %.1f%% (%.2fs/%.2fs)"),
-            ChargeRatio * 100.f, CurrentChargeTime, MaxChargeTime);
+        CurrentChargeTime = FMath::Min(CurrentChargeTime, MaxChargeTime);
     }
     else if (bIsCharging && CurrentActionState != EWukongActionState::HeavyCharge) {
-        // 如果状态改变但还在蓄力，取消蓄力
         CancelHeavyCharge();
     }
 
-    // 🛡️ 动画防护措施 - 防止动画蓝图出bug
-    PreventAnimationBlueprintDivisionByZero();     // 基础防护（目前为空）
-    FixAnimationBlueprintVariables();              // 高级防护：同步变量到动画蓝图
+    // 🛡️ 动画防护措施
+    PreventAnimationBlueprintDivisionByZero();
+    FixAnimationBlueprintVariables();
+
+    // 🆕 更新伤害数字显示
+    static float DamageNumberTimer = 0.f;
+    DamageNumberTimer += DeltaTime;
+    if (DamageNumberTimer >= 0.5f && DamageNumberValues.Num() > 0)
+    {
+        DamageNumberTimer = 0.f;
+        // 清除过期的伤害数字
+        DamageNumberValues.Empty();
+        DamageNumberLocations.Empty();
+        DamageNumberIsCritical.Empty();
+    }
 }
 
 // ==========================================
 // C++ 逻辑实现：替代蓝图 Switch 逻辑
 // ==========================================
 
-/* 🎯 执行攻击逻辑 - 替代蓝图中的复杂Switch语句
-   这个函数统一处理所有攻击的播放逻辑
-   @param NewAtttackMyCount - 新的连击数（动画蓝图用这个决定显示哪段攻击）
-   @param SectionName - 要播放的动画段落名（如"Attack1"） */
 void AWukongCharacter::ExecuteAttackLogic(int32 NewAtttackMyCount, FName SectionName)
 {
-    // ⚡ === 执行攻击逻辑 ===
     UE_LOG(LogTemp, Warning, TEXT("⚡ ===== EXECUTE ATTACK LOGIC ====="));
     UE_LOG(LogTemp, Warning, TEXT("📊 参数: AttackCount=%d, Section=%s"), NewAtttackMyCount, *SectionName.ToString());
 
-    // 步骤1：更新攻击状态
     bool OldAttacking = bMyIsAttacking;
     bMyIsAttacking = true;
     UE_LOG(LogTemp, Warning, TEXT("📊 攻击状态更新: %d → %d"), OldAttacking, bMyIsAttacking);
 
-    // 步骤2：更新连击计数
     int32 OldCount = AtttackMyCount;
     AtttackMyCount = NewAtttackMyCount;
     UE_LOG(LogTemp, Warning, TEXT("🔢 连击计数更新: %d → %d"), OldCount, AtttackMyCount);
 
-    // 步骤3：选择要播放的动画文件
     UAnimMontage* MontageToPlay = nullptr;
 
-    // 根据AtttackMyCount选择对应的动画文件
     switch (AtttackMyCount) {
     case 1:
         MontageToPlay = Attack1Montage;
@@ -598,7 +530,6 @@ void AWukongCharacter::ExecuteAttackLogic(int32 NewAtttackMyCount, FName Section
         UE_LOG(LogTemp, Warning, TEXT("🎯 选择播放Attack4动画"));
         break;
     case 0:
-        // 连击重置，不播放动画
         UE_LOG(LogTemp, Warning, TEXT("🔄 连击重置，不播放动画"));
         MontageToPlay = nullptr;
         break;
@@ -608,7 +539,6 @@ void AWukongCharacter::ExecuteAttackLogic(int32 NewAtttackMyCount, FName Section
         break;
     }
 
-    // 步骤4：播放选中的动画
     if (MontageToPlay)
     {
         UE_LOG(LogTemp, Warning, TEXT("🎬 播放动画: %s"), *GetNameSafe(MontageToPlay));
@@ -617,17 +547,27 @@ void AWukongCharacter::ExecuteAttackLogic(int32 NewAtttackMyCount, FName Section
         {
             UE_LOG(LogTemp, Warning, TEXT("✅ 动画播放成功"));
 
-            // ⚔️ 设置轻攻击伤害检测 - 在动画播放后0.3秒检测伤害
             GetWorldTimerManager().SetTimer(
-                DodgeTimerHandle, // 复用计时器
+                DodgeTimerHandle,
                 [this]() {
-                    PerformLightAttackDamageDetection();
+                    // 🆕 使用新的碰撞检测系统
+                    TArray<AActor*> Enemies = DetectEnemiesInRange(DefaultAttackRadius, EAttackDetectionType::Sector);
+                    if (Enemies.Num() > 0)
+                    {
+                        float Damage = LightAttackDamage;
+                        bool bIsCritical = (FMath::FRand() < CriticalHitChance);
+                        if (bIsCritical)
+                        {
+                            Damage *= CriticalHitMultiplier;
+                            UE_LOG(LogTemp, Warning, TEXT("💥 暴击！伤害倍率: %.1f"), CriticalHitMultiplier);
+                        }
+                        ApplyDamageToDetectedEnemies(Enemies, Damage, false);
+                    }
                 },
-                0.3f, // 动画开始后0.3秒检测伤害
+                0.3f,
                 false
             );
 
-            // 设置连击缓冲窗口
             float ComboWindowDuration = 0.5f;
             GetWorldTimerManager().SetTimer(
                 ComboWindowTimerHandle,
@@ -652,57 +592,42 @@ void AWukongCharacter::ExecuteAttackLogic(int32 NewAtttackMyCount, FName Section
     UE_LOG(LogTemp, Warning, TEXT("⚡ ===== ATTACK LOGIC EXECUTED =====\n"));
 }
 
-/* 🔄 重置攻击状态 - 连击窗口结束后清理状态
-   防止状态变量一直保持true，导致动画蓝图行为异常 */
 void AWukongCharacter::ResetAttackState()
 {
-    // 如果还在播放攻击动画，不要重置（避免打断连击）
     if (PrimaryMeleeMontage)
     {
         UAnimInstance* AnimInst = GetMesh()->GetAnimInstance();
         if (AnimInst && AnimInst->Montage_IsPlaying(PrimaryMeleeMontage))
-            return; // 正在播放动画，不重置
+            return;
     }
 
-    // 如果有排队的攻击，也不要重置（保持连击连贯性）
     if (bLightAttackQueued)
-        return; // 有缓存，不重置
+        return;
 
-    // 安全重置所有状态变量
-    bMyIsAttacking = false;        // 不再攻击
-    AtttackMyCount = 0;           // 连击数清零
-    GetWorldTimerManager().ClearTimer(ComboWindowTimerHandle); // 清理计时器
+    bMyIsAttacking = false;
+    AtttackMyCount = 0;
+    GetWorldTimerManager().ClearTimer(ComboWindowTimerHandle);
 }
 
-
-/* 🏷️ 获取段落名称 - 把连击索引转换为动画段落名
-   动画蒙太奇中不同的攻击段落命名规则
-   @param ComboIndex - 连击索引（0=第一段，1=第二段，2=第三段，3=第四段）
-   @return FName - 对应的段落名 */
 FName AWukongCharacter::GetSectionNameForComboIndex(int32 ComboIndex)
 {
     switch (ComboIndex)
     {
-    case 0: return FName(TEXT("Attack1")); // 第一段攻击动画
-    case 1: return FName(TEXT("Attack2")); // 第二段攻击动画
-    case 2: return FName(TEXT("Attack3")); // 第三段攻击动画
-    case 3: return FName(TEXT("Attack4")); // 第四段攻击动画（通常是终结技）
-    default: return FName(TEXT("Attack1")); // 默认播放第一段
+    case 0: return FName(TEXT("Attack1"));
+    case 1: return FName(TEXT("Attack2"));
+    case 2: return FName(TEXT("Attack3"));
+    case 3: return FName(TEXT("Attack4"));
+    default: return FName(TEXT("Attack1"));
     }
 }
 
-/**
- * @brief 根据连击索引调用 ExecuteAttackLogic
- */
 void AWukongCharacter::PlayLightAttackMontage(int32 ComboIndex)
 {
-    // 🎯 === 播放指定连击段落的独立动画 ===
     UE_LOG(LogTemp, Warning, TEXT("🎬 ===== PLAY ATTACK MONTAGE ====="));
     UE_LOG(LogTemp, Warning, TEXT("📊 参数: ComboIndex=%d"), ComboIndex);
 
-    // 根据连击索引选择对应的动画文件
     UAnimMontage* SelectedMontage = nullptr;
-    int32 AttackCount = ComboIndex + 1; // 1, 2, 3, 4
+    int32 AttackCount = ComboIndex + 1;
 
     switch (ComboIndex) {
     case 0:
@@ -719,14 +644,13 @@ void AWukongCharacter::PlayLightAttackMontage(int32 ComboIndex)
         break;
     case 3:
         SelectedMontage = Attack4Montage;
-        AttackCount = 4; // Attack4使用计数4
+        AttackCount = 4;
         UE_LOG(LogTemp, Warning, TEXT("🎯 选择Attack4动画文件（终结技）"));
         break;
     }
 
     if (SelectedMontage) {
-        // 直接播放选中的独立动画文件
-        ExecuteAttackLogic(AttackCount, FName(TEXT("Default"))); // 所有独立的动画都用Default段落
+        ExecuteAttackLogic(AttackCount, FName(TEXT("Default")));
         UE_LOG(LogTemp, Warning, TEXT("✅ 动画文件选择成功"));
     }
     else {
@@ -735,54 +659,32 @@ void AWukongCharacter::PlayLightAttackMontage(int32 ComboIndex)
 
     UE_LOG(LogTemp, Warning, TEXT("🎬 ===== MONTAGE PLAY REQUESTED =====\n"));
 }
-
 // ==========================================
 // 🎮 输入系统实现 - 处理玩家的按键输入
 // ==========================================
 
-/* 🏃 移动函数 - 处理WASD移动输入
-   @param Value - 输入值，包含X(左右)和Y(前后)方向 */
 void AWukongCharacter::Move(const FInputActionValue& Value) {
     FVector2D MovementVector = Value.Get<FVector2D>();
-
-    // 记录最后一次移动输入，用于闪避时确定方向
     LastMovementInput = MovementVector;
 
     if (Controller) {
-        // 步骤1：获取控制器的旋转（只关心水平朝向）
         const FRotator Rotation = Controller->GetControlRotation();
-        const FRotator YawRotation(0, Rotation.Yaw, 0); // 只取Yaw（水平旋转）
-
-        // 步骤2：从旋转矩阵中提取前后左右方向向量
-        const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X); // 前进方向
-        const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);   // 右移方向
-
-        // 步骤3：应用移动输入到角色
-        AddMovementInput(ForwardDirection, MovementVector.Y); // Y轴控制前后移动
-        AddMovementInput(RightDirection, MovementVector.X);   // X轴控制左右移动
+        const FRotator YawRotation(0, Rotation.Yaw, 0);
+        const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+        const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+        AddMovementInput(ForwardDirection, MovementVector.Y);
+        AddMovementInput(RightDirection, MovementVector.X);
     }
 }
 
-/* 👀 视角控制函数 - 处理鼠标移动的视角旋转
-   @param Value - 输入值，包含X(左右转)和Y(上下看)方向 */
 void AWukongCharacter::Look(const FInputActionValue& Value) {
     FVector2D LookAxisVector = Value.Get<FVector2D>();
 
     if (Controller) {
-        // 步骤1：处理水平旋转（Yaw）- 无限制自由旋转
         AddControllerYawInput(LookAxisVector.X);
-
-        // 步骤2：处理垂直旋转（Pitch）- 需要角度限制
         FRotator CurrentRotation = Controller->GetControlRotation();
-
-        // 步骤3：计算新的俯仰角
         float NewPitch = CurrentRotation.Pitch + LookAxisVector.Y;
-
-        // 步骤4：限制俯仰角范围（-80°到+45°）
-        // 防止玩家看到天空地下，保持舒适的视角体验
         NewPitch = FMath::ClampAngle(NewPitch, -80.0f, 45.0f);
-
-        // 步骤5：应用新的旋转角度
         FRotator NewRotation = CurrentRotation;
         NewRotation.Pitch = NewPitch;
         Controller->SetControlRotation(NewRotation);
@@ -793,138 +695,96 @@ void AWukongCharacter::Look(const FInputActionValue& Value) {
 // ⚔️ 战斗与动作逻辑 - 冲刺、闪避、重攻击等功能
 // ==========================================
 
-/* 🏃‍♂️ 开始冲刺 - 按下左Shift键时调用
-   让角色进入高速移动状态，但会消耗体力 */
 void AWukongCharacter::SprintStart() {
     UE_LOG(LogTemp, Warning, TEXT("SprintStart Triggered"));
-    CurrentActionState = EWukongActionState::Sprint;          // 设置状态为冲刺
-    GetCharacterMovement()->MaxWalkSpeed = 1000.0f;          // 冲刺速度：1000单位/秒
+    CurrentActionState = EWukongActionState::Sprint;
+    GetCharacterMovement()->MaxWalkSpeed = 1000.0f;
 }
 
-/* 🧍 结束冲刺 - 释放左Shift键时调用
-   恢复正常移动速度 */
 void AWukongCharacter::SprintStop() {
     UE_LOG(LogTemp, Warning, TEXT("SprintStop Triggered"));
-    CurrentActionState = EWukongActionState::Idle;           // 恢复空闲状态
-    GetCharacterMovement()->MaxWalkSpeed = 500.0f;           // 正常速度：500单位/秒
+    CurrentActionState = EWukongActionState::Idle;
+    GetCharacterMovement()->MaxWalkSpeed = 500.0f;
 }
 
-/* 💨 闪避函数 - 按F键执行的闪避动作
-   快速移动一段距离，期间无敌，但消耗体力并有冷却时间 */
 void AWukongCharacter::Dodge() {
-    // 🛡️ 前置条件检查
-    // 不能在闪避过程中再次闪避，也不能在冷却时间内闪避
     if (CurrentActionState == EWukongActionState::Dodge || !bCanDodge) {
         UE_LOG(LogTemp, Warning, TEXT("Dodge blocked: already dodging or cooling down"));
         return;
     }
 
-    // 🔋 体力检查 - 确保有足够的体力进行闪避
     if (CurrentStamina < DodgeStaminaCost) {
         UE_LOG(LogTemp, Warning, TEXT("Dodge blocked: stamina low"));
         return;
     }
 
-    // 🌤️ 空中状态检查 - 在空中时降低闪避效果
     bool bIsInAir = GetCharacterMovement()->IsFalling();
     float ActualDodgeDistance = DodgeDistance;
     if (bIsInAir) {
-        // 在空中时，闪避距离减半，防止角色速度过快
-        ActualDodgeDistance *= 0.5f; // 使用局部变量
+        ActualDodgeDistance *= 0.5f;
         UE_LOG(LogTemp, Warning, TEXT("Dodge in air: distance reduced to %.1f"), ActualDodgeDistance);
     }
-
-    // 💰 消耗体力 - 扣除闪避所需的体力值
-    CurrentStamina -= DodgeStaminaCost;
-
-    // === 动作打断逻辑 ===
-    // 停止当前正在播放的动画
+    UseSkill(DodgeStaminaCost);
+    //CurrentStamina -= DodgeStaminaCost;
+    if (CurrentStamina < DodgeStaminaCost) {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 闪避被阻止: 体力不足"));
+        return;
+    }
     if (GetMesh() && GetMesh()->GetAnimInstance()) {
         UAnimInstance* AnimInst = GetMesh()->GetAnimInstance();
-
-        // 停止所有蒙太奇播放
-        AnimInst->StopAllMontages(0.1f); // 0.1秒的融合时间
-
-        // 清理所有动画相关的定时器
+        AnimInst->StopAllMontages(0.1f);
         GetWorldTimerManager().ClearTimer(ComboWindowTimerHandle);
         GetWorldTimerManager().ClearTimer(DodgeTimerHandle);
         GetWorldTimerManager().ClearTimer(DodgeCooldownTimerHandle);
     }
 
-    // 重置状态变量
     bMyIsAttacking = false;
     bLightAttackQueued = false;
     CurrentLightComboIndex = 0;
     AtttackMyCount = 0;
 
-    // === 开始闪避 ===
     CurrentActionState = EWukongActionState::Dodge;
     bIsInvincible = true;
     bCanDodge = false;
 
-    // 计算闪避方向
-    FVector DodgeDirection = GetActorForwardVector(); // 默认向前
+    FVector DodgeDirection = GetActorForwardVector();
 
-    // 如果有移动输入，使用输入方向
     if (!LastMovementInput.IsNearlyZero()) {
-        // 获取控制器的旋转
         const FRotator Rotation = Controller->GetControlRotation();
         const FRotator YawRotation(0, Rotation.Yaw, 0);
-
-        // 计算基于输入的方向
         const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
         const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-
         DodgeDirection = (ForwardDirection * LastMovementInput.Y + RightDirection * LastMovementInput.X).GetSafeNormal();
     }
 
-    // 播放闪避动画（如果有的话）
     if (DodgeMontage) {
-        // 有动画：播放动画并同步移动
         PlayMontageSafe(DodgeMontage, 1.5f);
 
-        // 动画驱动的移动 - 让动画自然控制角色移动
-        // 检查是否应该使用Root Motion
         if (DodgeMontage->HasRootMotion()) {
-            // 如果动画有Root Motion，让它驱动移动
-            GetCharacterMovement()->SetMovementMode(MOVE_None); // 禁用物理移动，启用Root Motion
+            GetCharacterMovement()->SetMovementMode(MOVE_None);
         }
         else {
-            // 没有Root Motion，使用分步移动，保持正常物理
             FVector CurrentLocation = GetActorLocation();
             FVector DodgeTargetLocation = CurrentLocation + (DodgeDirection * ActualDodgeDistance);
-
-            // 计算所需速度（距离/时间）
-            float DodgeMoveTime = 0.3f; // 0.3秒完成移动
+            float DodgeMoveTime = 0.3f;
             FVector RequiredVelocity = (DodgeTargetLocation - CurrentLocation) / DodgeMoveTime;
-
-            // 使用LaunchCharacter，但不覆盖Z方向，保持正常物理
-            LaunchCharacter(RequiredVelocity, true, false); // XY覆盖，Z不覆盖
+            LaunchCharacter(RequiredVelocity, true, false);
         }
     }
     else {
-        // 无动画：纯程序化闪避
-        // 使用分步移动，但保持正常物理属性
         FVector CurrentLocation = GetActorLocation();
         FVector DodgeTargetLocation = CurrentLocation + (DodgeDirection * ActualDodgeDistance);
-
-        // 计算所需速度（距离/时间）
-        float DodgeMoveTime = 0.07f; // 0.1秒完成移动
+        float DodgeMoveTime = 0.07f;
         FVector RequiredVelocity = (DodgeTargetLocation - CurrentLocation) / DodgeMoveTime;
-
-        // 使用LaunchCharacter，但不覆盖Z方向，保持正常物理
-        LaunchCharacter(RequiredVelocity, true, false); // XY覆盖，Z不覆盖
-
+        LaunchCharacter(RequiredVelocity, true, false);
         UE_LOG(LogTemp, Warning, TEXT("Dodge without animation: Controlled move to target"));
     }
 
-    // 设置闪避结束定时器
     GetWorldTimerManager().SetTimer(
         DodgeTimerHandle,
         [this]() {
             bIsInvincible = false;
             CurrentActionState = EWukongActionState::Idle;
-            // 重新启用移动模式（如果被禁用了）
             GetCharacterMovement()->SetMovementMode(MOVE_Walking);
             UE_LOG(LogTemp, Warning, TEXT("Dodge ended, back to Idle"));
         },
@@ -932,7 +792,6 @@ void AWukongCharacter::Dodge() {
         false
     );
 
-    // 设置冷却定时器
     GetWorldTimerManager().SetTimer(
         DodgeCooldownTimerHandle,
         [this]() {
@@ -952,31 +811,20 @@ void AWukongCharacter::Dodge() {
 // 战斗系统 - 伤害、死亡、重生
 // ==========================================
 
-/* 💥 受伤函数 - 处理受到的伤害
-   @param DamageAmount - 伤害数值
-   @param DamageEvent - 伤害事件
-   @param EventInstigator - 伤害发起者
-   @param DamageCauser - 伤害来源
-   @return 实际造成的伤害 */
 float AWukongCharacter::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser)
 {
-    // 如果已经死亡，不再受伤
     if (bIsDead)
     {
         return 0.f;
     }
 
-    // 计算实际伤害（可以在这里添加伤害减免、护盾等逻辑）
     float ActualDamage = DamageAmount;
-
-    // 扣除生命值
-    CurrentHealth -= ActualDamage;
-    CurrentHealth = FMath::Max(CurrentHealth, 0.f); // 确保不低于0
+    ReceiveDamage(ActualDamage);
+    CurrentHealth = FMath::Max(CurrentHealth, 0.f);
 
     UE_LOG(LogTemp, Warning, TEXT("💥 受到伤害: %.1f, 剩余生命值: %.1f/%.1f"),
         ActualDamage, CurrentHealth, MaxHealth);
 
-    // 检查是否死亡
     if (CurrentHealth <= 0.f && !bIsDead)
     {
         Die();
@@ -985,65 +833,53 @@ float AWukongCharacter::TakeDamage(float DamageAmount, struct FDamageEvent const
     return ActualDamage;
 }
 
-/* 💀 死亡处理 - 角色死亡时的逻辑 */
 void AWukongCharacter::Die()
 {
     if (bIsDead)
     {
-        return; // 防止重复死亡
+        return;
     }
 
     bIsDead = true;
-    CurrentActionState = EWukongActionState::Idle; // 停止所有动作
+    CurrentActionState = EWukongActionState::Idle;
 
     UE_LOG(LogTemp, Warning, TEXT("💀 角色死亡！生命值: %.1f"), CurrentHealth);
 
-    // 停止所有动画
     if (GetMesh() && GetMesh()->GetAnimInstance())
     {
         GetMesh()->GetAnimInstance()->StopAllMontages(0.1f);
     }
 
-    // 禁用移动
     GetCharacterMovement()->DisableMovement();
 
-    // 设置死亡姿势（这里可以播放死亡动画）
-    // TODO: 添加死亡动画
-
-    // 延迟重生
     GetWorldTimerManager().SetTimer(
-        DodgeTimerHandle, // 复用计时器
+        DodgeTimerHandle,
         [this]() {
             Respawn();
         },
-        3.f, // 3秒后重生
+        3.f,
         false
     );
 }
-/* 🔄 重生处理 - 角色重生时的逻辑 */
+
 void AWukongCharacter::Respawn()
 {
     UE_LOG(LogTemp, Warning, TEXT("🔄 角色重生！"));
 
-    // 重置状态
     bIsDead = false;
     CurrentHealth = MaxHealth;
     CurrentStamina = MaxStamina;
     CurrentActionState = EWukongActionState::Idle;
 
-    // 重新启用移动
     GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 
-    // 重置位置到初始位置（或者检查点）
-    SetActorLocation(FVector(0.f, 0.f, 100.f)); // 临时重生点
+    SetActorLocation(FVector(0.f, 0.f, 100.f));
 
-    // 重置朝向
     SetActorRotation(FRotator::ZeroRotator);
+
     UE_LOG(LogTemp, Warning, TEXT("✅ 重生完成，生命值: %.1f/%.1f"), CurrentHealth, MaxHealth);
 }
-/* ⚔️ 对目标造成伤害 - 用于攻击命中时的伤害应用
-   @param Damage - 伤害数值
-   @param Target - 目标角色 */
+
 void AWukongCharacter::ApplyDamageToTarget(float Damage, AActor* Target)
 {
     if (!Target)
@@ -1051,150 +887,83 @@ void AWukongCharacter::ApplyDamageToTarget(float Damage, AActor* Target)
         return;
     }
 
-    // 创建伤害事件 - 使用简化的伤害事件
     FDamageEvent DamageEvent;
-    FHitResult HitResult; // 创建一个空的HitResult用于伤害事件
+    FHitResult HitResult;
     FPointDamageEvent PointDamageEvent(Damage, HitResult, GetActorForwardVector(), nullptr);
 
-    // 对目标造成伤害
     Target->TakeDamage(Damage, PointDamageEvent, GetController(), this);
 
     UE_LOG(LogTemp, Warning, TEXT("⚔️ 对目标造成伤害: %.1f"), Damage);
 }
 
-/* ⚔️ 执行重攻击伤害检测 - 检测命中目标并造成伤害
-   @param Damage - 伤害数值
-   @param AttackDirection - 攻击方向 */
 void AWukongCharacter::PerformHeavyAttackDamageDetection(float Damage, FVector AttackDirection)
 {
     UE_LOG(LogTemp, Warning, TEXT("🎯 ===== 重攻击伤害检测开始 ====="));
     UE_LOG(LogTemp, Warning, TEXT("📊 伤害数值: %.1f"), Damage);
-    UE_LOG(LogTemp, Warning, TEXT("📍 攻击方向: (%.2f,%.2f,%.2f)"), AttackDirection.X, AttackDirection.Y, AttackDirection.Z);
 
-    // 从角色位置开始，向攻击方向发射射线检测
-    FVector StartLocation = GetActorLocation() + FVector(0, 0, 50); // 从稍微高一点的位置开始
-    FVector EndLocation = StartLocation + (AttackDirection * 300.f); // 检测300单位距离内的目标
-
-    UE_LOG(LogTemp, Warning, TEXT("📍 检测范围: 从(%.1f,%.1f,%.1f) 到(%.1f,%.1f,%.1f)"),
-        StartLocation.X, StartLocation.Y, StartLocation.Z,
-        EndLocation.X, EndLocation.Y, EndLocation.Z);
-
-    // 射线检测参数
-    FHitResult HitResult;
-    FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor(this); // 忽略自己
-
-    // 执行射线检测
-    bool bHit = GetWorld()->LineTraceSingleByChannel(
-        HitResult,
-        StartLocation,
-        EndLocation,
-        ECC_Pawn, // 检测Pawn（角色）
-        QueryParams
+    // 🆕 使用新的碰撞检测系统
+    TArray<AActor*> Enemies = DetectEnemiesInRange(
+        DefaultAttackRadius * HeavyAttackRadiusMultiplier,
+        EAttackDetectionType::Circle
     );
 
-    // 调试绘制射线
-    DrawDebugLine(GetWorld(), StartLocation, EndLocation,
-        bHit ? FColor::Red : FColor::Green, false, 2.f, 0, 2.f);
-
-    if (bHit)
+    if (Enemies.Num() > 0)
     {
-        AActor* HitActor = HitResult.GetActor();
-        if (HitActor)
+        bool bIsCritical = (FMath::FRand() < CriticalHitChance);
+        float FinalDamage = Damage;
+        if (bIsCritical)
         {
-            float Distance = FVector::Distance(StartLocation, HitResult.Location);
-            UE_LOG(LogTemp, Warning, TEXT("🎯 ✅ 前方有目标被打中!"));
-            UE_LOG(LogTemp, Warning, TEXT("📋 命中详情: 目标=%s, 距离=%.1f米"), *HitActor->GetName(), Distance / 100.f);
-            UE_LOG(LogTemp, Warning, TEXT("📍 命中位置: (%.1f,%.1f,%.1f)"), HitResult.Location.X, HitResult.Location.Y, HitResult.Location.Z);
-
-            // 对命中的目标造成伤害
-            ApplyDamageToTarget(Damage, HitActor);
-
-            // 可以在这里添加击中特效、音效等
-            UE_LOG(LogTemp, Warning, TEXT("⚔️ 造成伤害: %.1f"), Damage);
+            FinalDamage *= CriticalHitMultiplier;
+            UE_LOG(LogTemp, Warning, TEXT("💥 重攻击暴击！伤害倍率: %.1f"), CriticalHitMultiplier);
         }
+        ApplyDamageToDetectedEnemies(Enemies, FinalDamage, true);
     }
     else
     {
         UE_LOG(LogTemp, Warning, TEXT("❌ ❌ 前方没有目标被打中"));
-        UE_LOG(LogTemp, Warning, TEXT("💡 提示: 确保目标在检测范围内(300单位内)且为Pawn类型"));
     }
 
     UE_LOG(LogTemp, Warning, TEXT("🎯 ===== 重攻击伤害检测结束 =====\n"));
 }
 
-/* ⚔️ 执行轻攻击伤害检测 - 检测命中目标并造成伤害 */
 void AWukongCharacter::PerformLightAttackDamageDetection()
 {
     UE_LOG(LogTemp, Warning, TEXT("🎯 ===== 轻攻击伤害检测开始 ====="));
     UE_LOG(LogTemp, Warning, TEXT("📊 伤害数值: %.1f"), LightAttackDamage);
 
-    // 从角色位置开始，向前方发射射线检测
-    FVector StartLocation = GetActorLocation() + FVector(0, 0, 50); // 从稍微高一点的位置开始
-    FVector EndLocation = StartLocation + (GetActorForwardVector() * 200.f); // 检测200单位距离内的目标
+    // 🆕 使用新的碰撞检测系统
+    TArray<AActor*> Enemies = DetectEnemiesInRange(DefaultAttackRadius, EAttackDetectionType::Sector);
 
-    UE_LOG(LogTemp, Warning, TEXT("📍 检测范围: 从(%.1f,%.1f,%.1f) 到(%.1f,%.1f,%.1f)"),
-        StartLocation.X, StartLocation.Y, StartLocation.Z,
-        EndLocation.X, EndLocation.Y, EndLocation.Z);
-
-    // 射线检测参数
-    FHitResult HitResult;
-    FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor(this); // 忽略自己
-
-    // 执行射线检测
-    bool bHit = GetWorld()->LineTraceSingleByChannel(
-        HitResult,
-        StartLocation,
-        EndLocation,
-        ECC_Pawn, // 检测Pawn（角色）
-        QueryParams
-    );
-
-    // 调试绘制射线
-    DrawDebugLine(GetWorld(), StartLocation, EndLocation,
-        bHit ? FColor::Red : FColor::Green, false, 2.f, 0, 2.f);
-
-    if (bHit)
+    if (Enemies.Num() > 0)
     {
-        AActor* HitActor = HitResult.GetActor();
-        if (HitActor)
+        bool bIsCritical = (FMath::FRand() < CriticalHitChance);
+        float FinalDamage = LightAttackDamage;
+        if (bIsCritical)
         {
-            float Distance = FVector::Distance(StartLocation, HitResult.Location);
-            UE_LOG(LogTemp, Warning, TEXT("🎯 ✅ 前方有目标被打中!"));
-            UE_LOG(LogTemp, Warning, TEXT("📋 命中详情: 目标=%s, 距离=%.1f米"), *HitActor->GetName(), Distance / 100.f);
-            UE_LOG(LogTemp, Warning, TEXT("📍 命中位置: (%.1f,%.1f,%.1f)"), HitResult.Location.X, HitResult.Location.Y, HitResult.Location.Z);
-
-            // 对命中的目标造成伤害
-            ApplyDamageToTarget(LightAttackDamage, HitActor);
-
-            // 可以在这里添加击中特效、音效等
-            UE_LOG(LogTemp, Warning, TEXT("⚔️ 造成伤害: %.1f"), LightAttackDamage);
+            FinalDamage *= CriticalHitMultiplier;
+            UE_LOG(LogTemp, Warning, TEXT("💥 轻攻击暴击！伤害倍率: %.1f"), CriticalHitMultiplier);
         }
+        ApplyDamageToDetectedEnemies(Enemies, FinalDamage, false);
     }
     else
     {
         UE_LOG(LogTemp, Warning, TEXT("❌ ❌ 前方没有目标被打中"));
-        UE_LOG(LogTemp, Warning, TEXT("💡 提示: 确保目标在检测范围内(200单位内)且为Pawn类型"));
     }
 
     UE_LOG(LogTemp, Warning, TEXT("🎯 ===== 轻攻击伤害检测结束 =====\n"));
 }
-
 // ==========================================
 // 测试功能 - 调试和测试用
 // ==========================================
 
-/* 🩹 测试自己受伤 - 模拟受到伤害 */
 void AWukongCharacter::TestTakeDamage()
 {
     UE_LOG(LogTemp, Warning, TEXT("🩹 ===== TEST TAKE DAMAGE TRIGGERED ====="));
     UE_LOG(LogTemp, Warning, TEXT("🔍 函数被调用了！时间: %.2f"), GetWorld()->GetTimeSeconds());
 
-    // 给自己造成30点伤害
     float TestDamage = 30.f;
     FDamageEvent DamageEvent;
-    FHitResult HitResult; // 创建一个空的HitResult用于伤害事件
+    FHitResult HitResult;
     FPointDamageEvent PointDamageEvent(TestDamage, HitResult, GetActorForwardVector(), nullptr);
 
     TakeDamage(TestDamage, PointDamageEvent, nullptr, nullptr);
@@ -1202,14 +971,12 @@ void AWukongCharacter::TestTakeDamage()
     UE_LOG(LogTemp, Warning, TEXT("✅ 测试伤害应用完成: %.1f 伤害"), TestDamage);
 }
 
-/* 💀 测试死亡 - 直接触发死亡 */
 void AWukongCharacter::TestDie()
 {
     UE_LOG(LogTemp, Warning, TEXT("💀 ===== TEST DIE ====="));
 
     if (!bIsDead)
     {
-        // 直接设置生命值为0来触发死亡
         CurrentHealth = 0.f;
         Die();
         UE_LOG(LogTemp, Warning, TEXT("✅ 测试死亡触发"));
@@ -1220,14 +987,12 @@ void AWukongCharacter::TestDie()
     }
 }
 
-/* 🔄 测试重生 - 直接触发重生 */
 void AWukongCharacter::TestRespawn()
 {
     UE_LOG(LogTemp, Warning, TEXT("🔄 ===== TEST RESPAWN ====="));
 
     if (bIsDead)
     {
-        // 取消死亡定时器，直接重生
         GetWorldTimerManager().ClearTimer(DodgeTimerHandle);
         Respawn();
         UE_LOG(LogTemp, Warning, TEXT("✅ 测试重生触发"));
@@ -1238,30 +1003,25 @@ void AWukongCharacter::TestRespawn()
     }
 }
 
-/* 👁️ 测试前方检测 - 检测前方是否有目标 */
 void AWukongCharacter::TestFrontDetection()
 {
     UE_LOG(LogTemp, Warning, TEXT("👁️ ===== TEST FRONT DETECTION ====="));
 
-    // 从角色位置开始，向前方发射射线检测
-    FVector StartLocation = GetActorLocation() + FVector(0, 0, 50); // 从稍微高一点的位置开始
-    FVector EndLocation = StartLocation + (GetActorForwardVector() * 500.f); // 检测500单位距离内的目标
+    FVector StartLocation = GetActorLocation() + FVector(0, 0, 50);
+    FVector EndLocation = StartLocation + (GetActorForwardVector() * 500.f);
 
-    // 射线检测参数
     FHitResult HitResult;
     FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor(this); // 忽略自己
+    QueryParams.AddIgnoredActor(this);
 
-    // 执行射线检测
     bool bHit = GetWorld()->LineTraceSingleByChannel(
         HitResult,
         StartLocation,
         EndLocation,
-        ECC_Pawn, // 检测Pawn（角色）
+        ECC_Pawn,
         QueryParams
     );
 
-    // 调试绘制射线
     DrawDebugLine(GetWorld(), StartLocation, EndLocation,
         bHit ? FColor::Green : FColor::Red, false, 3.f, 0, 3.f);
 
@@ -1282,24 +1042,19 @@ void AWukongCharacter::TestFrontDetection()
     }
 }
 
-/* 🔋 开始重攻击蓄力 - 按下右键时调用
-   开始蓄力计时，准备重攻击 */
 void AWukongCharacter::StartHeavyCharge() {
     UE_LOG(LogTemp, Warning, TEXT("🔋 ===== START HEAVY CHARGE ====="));
 
-    // 检查是否可以开始蓄力
     if (CurrentActionState != EWukongActionState::Idle) {
         UE_LOG(LogTemp, Warning, TEXT("⚠️ 无法开始蓄力：当前状态不是空闲"));
         return;
     }
 
-    // 体力检查
     if (CurrentStamina < HeavyAttackStaminaCost) {
         UE_LOG(LogTemp, Warning, TEXT("⚠️ 无法开始蓄力：体力不足"));
         return;
     }
 
-    // 开始蓄力
     CurrentActionState = EWukongActionState::HeavyCharge;
     bIsCharging = true;
     CurrentChargeTime = 0.f;
@@ -1307,40 +1062,32 @@ void AWukongCharacter::StartHeavyCharge() {
     UE_LOG(LogTemp, Warning, TEXT("✅ 开始重攻击蓄力"));
 }
 
-/* 💥 释放重攻击 - 松开右键时调用
-   根据蓄力时间释放重攻击 */
 void AWukongCharacter::ReleaseHeavyAttack() {
     UE_LOG(LogTemp, Warning, TEXT("💥 ===== RELEASE HEAVY ATTACK ====="));
 
-    // 如果没有在蓄力，直接返回
     if (!bIsCharging || CurrentActionState != EWukongActionState::HeavyCharge) {
         UE_LOG(LogTemp, Warning, TEXT("⚠️ 没有在蓄力状态，忽略释放"));
         return;
     }
 
-    // 计算蓄力倍率
     float ChargeRatio = FMath::Min(CurrentChargeTime / MaxChargeTime, 1.f);
     float DamageMultiplier = FMath::Lerp(MinChargeDamageMultiplier, MaxChargeDamageMultiplier, ChargeRatio);
 
     UE_LOG(LogTemp, Warning, TEXT("📊 蓄力时间: %.2fs, 倍率: %.2f"), CurrentChargeTime, DamageMultiplier);
 
-    // 结束蓄力状态
     bIsCharging = false;
     CurrentActionState = EWukongActionState::Idle;
 
-    // 执行重攻击（传递伤害倍率）
     ExecuteHeavyAttack(DamageMultiplier);
 
     UE_LOG(LogTemp, Warning, TEXT("✅ ===== HEAVY CHARGE RELEASED =====\n"));
 }
 
-/* ❌ 取消重攻击蓄力 - 当蓄力被打断时调用 */
 void AWukongCharacter::CancelHeavyCharge() {
     if (bIsCharging && CurrentActionState == EWukongActionState::HeavyCharge) {
         UE_LOG(LogTemp, Warning, TEXT("❌ ===== CANCEL HEAVY CHARGE ====="));
         UE_LOG(LogTemp, Warning, TEXT("📊 取消蓄力，蓄力时间: %.2fs"), CurrentChargeTime);
 
-        // 重置蓄力状态
         bIsCharging = false;
         CurrentChargeTime = 0.f;
         CurrentActionState = EWukongActionState::Idle;
@@ -1349,54 +1096,41 @@ void AWukongCharacter::CancelHeavyCharge() {
     }
 }
 
-/* 💥 执行重攻击 - 实际的重攻击逻辑
-   @param DamageMultiplier - 伤害倍率（基于蓄力时间） */
 void AWukongCharacter::ExecuteHeavyAttack(float DamageMultiplier) {
     UE_LOG(LogTemp, Warning, TEXT("🎯 ===== EXECUTE HEAVY ATTACK ====="));
     UE_LOG(LogTemp, Warning, TEXT("📊 伤害倍率: %.2f"), DamageMultiplier);
 
-    // 存储伤害倍率，用于后续伤害计算
-    float CurrentDamageMultiplier = DamageMultiplier;
-
-    // 🛡️ 前置条件检查
     if (CurrentActionState == EWukongActionState::HeavyAttack ||
         CurrentActionState == EWukongActionState::Dodge) {
         UE_LOG(LogTemp, Warning, TEXT("⚠️ 重攻击被阻止: 当前状态不适合"));
         return;
     }
 
-    // 🔋 体力检查
-    if (CurrentStamina < HeavyAttackStaminaCost) {
-        UE_LOG(LogTemp, Warning, TEXT("⚠️ 重攻击被阻止: 体力不足"));
-        return;
-    }
 
-    // 💰 消耗体力
-    CurrentStamina -= HeavyAttackStaminaCost;
 
-    // === 动作打断逻辑 ===
+    //CurrentStamina -= HeavyAttackStaminaCost;
+    UseSkill(HeavyAttackStaminaCost);
+    useskillslot();
+    // 检查冷却和体力
+  
     if (GetMesh() && GetMesh()->GetAnimInstance()) {
         UAnimInstance* AnimInst = GetMesh()->GetAnimInstance();
         AnimInst->StopAllMontages(0.1f);
         GetWorldTimerManager().ClearTimer(ComboWindowTimerHandle);
     }
 
-    // 重置轻攻击状态
     bMyIsAttacking = false;
     bLightAttackQueued = false;
     CurrentLightComboIndex = 0;
     AtttackMyCount = 0;
 
-    // === 开始重攻击 ===
     CurrentActionState = EWukongActionState::HeavyAttack;
-    bMyIsAttacking = true;  // 设置攻击状态标志，让动画蓝图知道正在攻击
+    bMyIsAttacking = true;
 
-    // 计算实际伤害
     float ActualDamage = HeavyAttackBaseDamage * DamageMultiplier;
     UE_LOG(LogTemp, Warning, TEXT("⚔️ 重攻击伤害: 基础%.1f × 倍率%.2f = 实际%.1f"),
         HeavyAttackBaseDamage, DamageMultiplier, ActualDamage);
 
-    // 🎬 播放重攻击动画
     if (HeavyAttackMontage) {
         PlayMontageSafe(HeavyAttackMontage, 0.7f, FName(TEXT("Default")));
         UE_LOG(LogTemp, Warning, TEXT("🎬 播放重攻击动画"));
@@ -1407,11 +1141,8 @@ void AWukongCharacter::ExecuteHeavyAttack(float DamageMultiplier) {
         UE_LOG(LogTemp, Error, TEXT("❌ HeavyAttackMontage 未加载！"));
     }
 
-    // 🏃‍♂️ === 关键：立即执行向前突进 ===
-    // 计算突进方向（默认为角色面向前方）
     FVector AttackDirection = GetActorForwardVector();
 
-    // 如果有移动输入，使用输入方向（和闪避一样的逻辑）
     if (!LastMovementInput.IsNearlyZero() && Controller) {
         const FRotator Rotation = Controller->GetControlRotation();
         const FRotator YawRotation(0, Rotation.Yaw, 0);
@@ -1423,50 +1154,41 @@ void AWukongCharacter::ExecuteHeavyAttack(float DamageMultiplier) {
         UE_LOG(LogTemp, Warning, TEXT("📊 使用输入方向进行重攻击突进"));
     }
 
-    // 计算目标位置和所需速度
     FVector CurrentLocation = GetActorLocation();
     FVector AttackTargetLocation = CurrentLocation + (AttackDirection * HeavyAttackDistance);
 
-    // 考虑地形高度（防止掉下悬崖）
     FHitResult HitResult;
-    FVector TraceStart = AttackTargetLocation + FVector(0, 0, 100);  // 从上方100单位开始
-    FVector TraceEnd = AttackTargetLocation - FVector(0, 0, 500);    // 向下探测500单位
+    FVector TraceStart = AttackTargetLocation + FVector(0, 0, 100);
+    FVector TraceEnd = AttackTargetLocation - FVector(0, 0, 500);
 
     if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic)) {
-        // 找到地面，调整目标位置高度
         AttackTargetLocation.Z = HitResult.Location.Z + GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
         UE_LOG(LogTemp, Warning, TEXT("🌍 检测到地面，调整高度到: %.1f"), AttackTargetLocation.Z);
     }
 
-    // 计算所需速度
     FVector RequiredVelocity = (AttackTargetLocation - CurrentLocation) / HeavyAttackDuration;
 
-    // 🚀 执行突进
-    LaunchCharacter(RequiredVelocity, true, true); // XY和Z都覆盖
+    LaunchCharacter(RequiredVelocity, true, true);
 
     UE_LOG(LogTemp, Warning, TEXT("🚀 重攻击突进: 方向(%.2f,%.2f,%.2f), 距离=%.1f, 速度=%.1f"),
         AttackDirection.X, AttackDirection.Y, AttackDirection.Z,
         HeavyAttackDistance, RequiredVelocity.Size());
 
-    // ⚔️ 设置伤害检测定时器 - 在突进开始后0.2秒检测命中
     GetWorldTimerManager().SetTimer(
-        ComboWindowTimerHandle, // 复用计时器
+        ComboWindowTimerHandle,
         [this, ActualDamage, AttackDirection]() {
-            // 执行伤害检测和应用
             PerformHeavyAttackDamageDetection(ActualDamage, AttackDirection);
         },
-        0.2f, // 突进开始后0.2秒检测伤害
+        0.2f,
         false
     );
 
-    // ⏰ 设置重攻击结束定时器
     GetWorldTimerManager().SetTimer(
-        DodgeTimerHandle,  // 可以复用这个计时器
+        DodgeTimerHandle,
         [this]() {
-            // 重攻击结束
             if (CurrentActionState == EWukongActionState::HeavyAttack) {
                 CurrentActionState = EWukongActionState::Idle;
-                bMyIsAttacking = false;  // 重置攻击状态标志
+                bMyIsAttacking = false;
                 UE_LOG(LogTemp, Warning, TEXT("🏁 重攻击结束，回到空闲状态"));
             }
         },
@@ -1483,10 +1205,8 @@ void AWukongCharacter::ExecuteHeavyAttack(float DamageMultiplier) {
 
 void AWukongCharacter::LightAttack()
 {
-    // 📋 === 轻攻击函数开始 ===
     UE_LOG(LogTemp, Warning, TEXT("🎯 ===== LIGHT ATTACK TRIGGERED ====="));
 
-    // 🔧 基础检查
     if (!GetMesh() || !PrimaryMeleeMontage) {
         UE_LOG(LogTemp, Error, TEXT("❌ 轻攻击失败: Mesh=%d, Montage=%d"),
             GetMesh() != nullptr, PrimaryMeleeMontage != nullptr);
@@ -1499,11 +1219,9 @@ void AWukongCharacter::LightAttack()
         return;
     }
 
-    // 📊 当前状态快照 - 检查是否有任何攻击动画在播放
     bool IsPlayingAttack = false;
     FName CurrentSection = NAME_None;
 
-    // 检查所有攻击动画是否在播放
     if (Attack1Montage && AnimInst->Montage_IsPlaying(Attack1Montage)) {
         IsPlayingAttack = true;
         CurrentSection = FName(TEXT("Attack1"));
@@ -1525,7 +1243,6 @@ void AWukongCharacter::LightAttack()
         CurrentSection = FName(TEXT("HeavyAttack"));
     }
 
-    // 兼容旧的PrimaryMeleeMontage检查
     if (!IsPlayingAttack && PrimaryMeleeMontage && AnimInst->Montage_IsPlaying(PrimaryMeleeMontage)) {
         IsPlayingAttack = true;
         CurrentSection = AnimInst->Montage_GetCurrentSection(PrimaryMeleeMontage);
@@ -1536,7 +1253,6 @@ void AWukongCharacter::LightAttack()
 
     if (IsPlayingAttack)
     {
-        // ✅ 触发连击缓冲机制
         bLightAttackQueued = true;
         float CurrentPos = AnimInst->Montage_GetPosition(PrimaryMeleeMontage);
         float TotalLength = PrimaryMeleeMontage->GetPlayLength();
@@ -1548,14 +1264,12 @@ void AWukongCharacter::LightAttack()
         return;
     }
 
-    // 🚀 开始新的连击序列
     UE_LOG(LogTemp, Warning, TEXT("🚀 【开始新连击】重置连击状态"));
     CurrentLightComboIndex = 0;
     bLightAttackQueued = false;
     bMyIsAttacking = true;
     AtttackMyCount = 1;
 
-    // 🎯 执行第一段攻击（PlayMontageSafe会自动绑定回调）
     PlayLightAttackMontage(0);
 
     UE_LOG(LogTemp, Warning, TEXT("✅ 【连击启动】Attack1开始播放，等待动画结束"));
@@ -1564,10 +1278,8 @@ void AWukongCharacter::LightAttack()
 
 void AWukongCharacter::OnLightAttackMontageEnded(UAnimMontage* Montage, bool bInterrupted)
 {
-    // 📋 === 动画结束事件处理开始 ===
     UE_LOG(LogTemp, Warning, TEXT("🏁 ===== ANIMATION ENDED ====="));
 
-    // 📊 分析结束原因 - 根据结束的动画文件确定当前段落
     FName CurrentSection = NAME_None;
     if (Montage == Attack1Montage) {
         CurrentSection = FName(TEXT("Attack1"));
@@ -1583,13 +1295,11 @@ void AWukongCharacter::OnLightAttackMontageEnded(UAnimMontage* Montage, bool bIn
     }
     else if (Montage == HeavyAttackMontage) {
         CurrentSection = FName(TEXT("HeavyAttack"));
-        // 重攻击结束，直接返回空闲状态
         CurrentActionState = EWukongActionState::Idle;
         UE_LOG(LogTemp, Warning, TEXT("🏁 重攻击动画结束"));
         return;
     }
     else {
-        // 兼容旧的PrimaryMeleeMontage
         CurrentSection = GetSectionNameForComboIndex(CurrentLightComboIndex);
     }
 
@@ -1609,16 +1319,13 @@ void AWukongCharacter::OnLightAttackMontageEnded(UAnimMontage* Montage, bool bIn
 
     if (bLightAttackQueued)
     {
-        // 🎯 连击继续 - 处理缓冲的攻击
         UE_LOG(LogTemp, Warning, TEXT("✅ 【连击继续】检测到缓冲的攻击，开始处理"));
 
         bLightAttackQueued = false;
         int32 PreviousIndex = CurrentLightComboIndex;
         CurrentLightComboIndex++;
 
-        // 🔄 处理连击结束
         if (CurrentLightComboIndex >= 4) {
-            // Attack4结束后连击完成
             UE_LOG(LogTemp, Warning, TEXT("🎉 【连击完成】Attack4结束，连击序列完成"));
             ClearComboQueue();
             UE_LOG(LogTemp, Warning, TEXT("🏁 ===== COMBO SEQUENCE COMPLETE =====\n"));
@@ -1628,7 +1335,6 @@ void AWukongCharacter::OnLightAttackMontageEnded(UAnimMontage* Montage, bool bIn
             UE_LOG(LogTemp, Warning, TEXT("➡️ 【连击递进】%d → %d"), PreviousIndex, CurrentLightComboIndex);
         }
 
-        // 🎯 执行下一段攻击（PlayMontageSafe会自动绑定回调）
         int32 NextAttackNumber = CurrentLightComboIndex + 1;
         UE_LOG(LogTemp, Warning, TEXT("🎯 【执行下一击】播放Attack%d"), NextAttackNumber);
         PlayLightAttackMontage(CurrentLightComboIndex);
@@ -1637,7 +1343,6 @@ void AWukongCharacter::OnLightAttackMontageEnded(UAnimMontage* Montage, bool bIn
     }
     else
     {
-        // 🛑 连击结束
         UE_LOG(LogTemp, Warning, TEXT("🛑 【连击结束】没有缓冲的攻击，序列完成"));
         ClearComboQueue();
         UE_LOG(LogTemp, Warning, TEXT("🎉 【连击序列完成】所有攻击播放完毕"));
@@ -1648,10 +1353,8 @@ void AWukongCharacter::OnLightAttackMontageEnded(UAnimMontage* Montage, bool bIn
 
 void AWukongCharacter::ClearComboQueue()
 {
-    // 🧹 === 连击状态清理 ===
     UE_LOG(LogTemp, Warning, TEXT("🧹 ===== CLEAR COMBO QUEUE ====="));
 
-    // 📋 记录清理前的状态（用于调试）
     bool WasQueued = bLightAttackQueued;
     int32 WasComboIndex = CurrentLightComboIndex;
     bool WasAttacking = bMyIsAttacking;
@@ -1660,23 +1363,19 @@ void AWukongCharacter::ClearComboQueue()
     UE_LOG(LogTemp, Warning, TEXT("📋 清理前状态: 缓冲=%d, 连击索引=%d, 攻击中=%d, 计数=%d"),
         WasQueued, WasComboIndex, WasAttacking, WasAttackCount);
 
-    // 🔄 执行状态重置
     bLightAttackQueued = false;
     CurrentLightComboIndex = 0;
     bMyIsAttacking = false;
     AtttackMyCount = 0;
-    // 只有在不是重攻击时才重置为Idle
     if (CurrentActionState != EWukongActionState::HeavyAttack) {
         CurrentActionState = EWukongActionState::Idle;
     }
 
     UE_LOG(LogTemp, Warning, TEXT("🔄 状态已重置: 缓冲=false, 索引=0, 攻击=false, 计数=0"));
 
-    // ⏰ 清理计时器
     GetWorldTimerManager().ClearTimer(ComboWindowTimerHandle);
     UE_LOG(LogTemp, Warning, TEXT("⏰ 连击缓冲计时器已清理"));
 
-    // 🎬 停止动画播放（除了重攻击）
     if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
     {
         if (CurrentActionState != EWukongActionState::HeavyAttack) {
@@ -1693,9 +1392,8 @@ void AWukongCharacter::ClearComboQueue()
     UE_LOG(LogTemp, Warning, TEXT("✅ 连击清理完成 - 所有状态已重置"));
     UE_LOG(LogTemp, Warning, TEXT("🧹 ===== COMBO QUEUE CLEARED =====\n"));
 }
-
 // ========================================== 
-// PossessedBy / BeginPlay / Input binding 等（和你原来保持一致） 
+// PossessedBy / BeginPlay / Input binding 等
 // ========================================== 
 
 void AWukongCharacter::PossessedBy(AController* NewController) {
@@ -1738,6 +1436,8 @@ void AWukongCharacter::PossessedBy(AController* NewController) {
                     InputMappingContext->MapKey(SprintAction, EKeys::LeftShift);
                     InputMappingContext->MapKey(DodgeAction, EKeys::LeftControl);
                     InputMappingContext->MapKey(HeavyAttackAction, EKeys::RightMouseButton);
+                    InputMappingContext->MapKey(ToggleInvisibilityAction, EKeys::V);
+                    InputMappingContext->MapKey(TransformAction, EKeys::R); // 🌀 变身按键
                 }
                 Subsystem->AddMappingContext(InputMappingContext, 100);
                 UE_LOG(LogTemp, Warning, TEXT("Runtime IMC applied in PossessedBy. MappingCount=%d"), InputMappingContext->GetMappings().Num());
@@ -1751,9 +1451,28 @@ void AWukongCharacter::BeginPlay()
     Super::BeginPlay();
     UE_LOG(LogTemp, Warning, TEXT("BeginPlay Triggered"));
 
-    // =============================== 
-    // Enhanced Input Runtime IMC 绑定
-    // =============================== 
+    if (IsLocallyControlled() && PlayerWidgetClass != nullptr)
+    {
+        MyPlayerHUD = CreateWidget<UMyPlayerWidget>(GetWorld(), PlayerWidgetClass);
+
+        if (MyPlayerHUD)
+        {
+            MyPlayerHUD->AddToViewport();
+            MyPlayerHUD->UpdateHealth(CurrentHealth, MaxHealth);
+            MyPlayerHUD->UpdateMana(CurrentStamina, MaxStamina);
+        }
+    }
+    if (MyPlayerHUD)
+    {
+        if (UInventoryWidget* Inv = MyPlayerHUD->GetInventoryWidget())
+        {
+            Inv->AddItem(EItemType::HealthPotion, TEXT("Health Potion"), 5);
+            Inv->AddItem(EItemType::ManaPotion, TEXT("Mana Potion"), 3);
+        }
+    }
+
+    SaveOriginalMaterials();
+
     if (APlayerController* PC = Cast<APlayerController>(GetController()))
     {
         if (ULocalPlayer* LP = PC->GetLocalPlayer())
@@ -1769,7 +1488,6 @@ void AWukongCharacter::BeginPlay()
 
                     InputMappingContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Wukong_Runtime_Ensured"));
 
-                    // WASD/方向键映射
                     InputMappingContext->MapKey(MoveAction, EKeys::D);
                     {
                         auto& AMap = InputMappingContext->MapKey(MoveAction, EKeys::A);
@@ -1789,7 +1507,6 @@ void AWukongCharacter::BeginPlay()
                         SMap.Modifiers.Add(NewObject<UInputModifierNegate>(this));
                     }
 
-                    // Look
                     InputMappingContext->MapKey(LookAction, EKeys::MouseX);
                     {
                         auto& MY = InputMappingContext->MapKey(LookAction, EKeys::MouseY);
@@ -1798,12 +1515,13 @@ void AWukongCharacter::BeginPlay()
                         MY.Modifiers.Add(SwzY);
                     }
 
-                    // 其他动作
                     InputMappingContext->MapKey(JumpAction, EKeys::SpaceBar);
                     InputMappingContext->MapKey(LightAttackAction, EKeys::LeftMouseButton);
                     InputMappingContext->MapKey(SprintAction, EKeys::LeftShift);
                     InputMappingContext->MapKey(DodgeAction, EKeys::LeftControl);
                     InputMappingContext->MapKey(HeavyAttackAction, EKeys::RightMouseButton);
+                    InputMappingContext->MapKey(ToggleInvisibilityAction, EKeys::V);
+                    InputMappingContext->MapKey(TransformAction, EKeys::R); // 🌀 变身按键
                 }
 
                 Subsystem->AddMappingContext(InputMappingContext, 100);
@@ -1812,24 +1530,13 @@ void AWukongCharacter::BeginPlay()
             }
         }
     }
-    // --- 播放开局/重生蒙太奇 ---
-    if (StartMontage)
-    {
-        PlayMontageSafe(StartMontage, 1.0f, FName(TEXT("UpperBody")));
-        UE_LOG(LogTemp, Warning, TEXT("have been Playing StartMontage with UpperBody slot"));
-    }
 
-
-    // ===============================
-    // 防止动画蓝图干扰：完全依赖 C++ 变量
-    // ===============================
     bMyIsAttacking = false;
     bLightAttackQueued = false;
     CurrentLightComboIndex = 0;
     AtttackMyCount = 0;
     CurrentActionState = EWukongActionState::Idle;
 
-    // 🔍 检查动画资源的段落信息
     if (PrimaryMeleeMontage) {
         UE_LOG(LogTemp, Warning, TEXT("📋 动画资源检查: %s"), *GetNameSafe(PrimaryMeleeMontage));
         UE_LOG(LogTemp, Warning, TEXT("📊 总段落数: %d"), PrimaryMeleeMontage->CompositeSections.Num());
@@ -1840,7 +1547,6 @@ void AWukongCharacter::BeginPlay()
                 i, *Section.SectionName.ToString());
         }
 
-        // 检查我们需要的段落是否存在
         TArray<FName> RequiredSections = { FName(TEXT("Attack1")), FName(TEXT("Attack2")),
                                          FName(TEXT("Attack3")), FName(TEXT("Attack4")) };
         for (FName RequiredSection : RequiredSections) {
@@ -1863,7 +1569,6 @@ void AWukongCharacter::BeginPlay()
         UE_LOG(LogTemp, Error, TEXT("❌ PrimaryMeleeMontage未加载！"));
     }
 
-    // 检查重攻击动画
     if (HeavyAttackMontage) {
         UE_LOG(LogTemp, Warning, TEXT("✅ HeavyAttackMontage已加载: %s"), *GetNameSafe(HeavyAttackMontage));
     }
@@ -1871,10 +1576,9 @@ void AWukongCharacter::BeginPlay()
         UE_LOG(LogTemp, Error, TEXT("❌ HeavyAttackMontage未加载！"));
     }
 
-    // 如果需要，可以直接初始化动画蓝图的变量防止读取异常
     if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
     {
-        AnimInst->Montage_Stop(0.0f); // 停止所有蒙太奇
+        AnimInst->Montage_Stop(0.0f);
     }
 
     UE_LOG(LogTemp, Warning, TEXT("C++防干扰连击初始化完成."));
@@ -1894,13 +1598,11 @@ void AWukongCharacter::OnRep_Controller() {
     }
 }
 
-// 播放蒙太奇安全检查 
+// 播放蒙太奇安全检查
 bool AWukongCharacter::PlayMontageSafe(UAnimMontage* Montage, float InPlayRate, FName StartSection)
 {
-    // 🛡️ === 安全播放动画 ===
     UE_LOG(LogTemp, Warning, TEXT("🛡️ ===== PLAY MONTAGE SAFE ====="));
 
-    // 🔧 基础验证
     if (!Montage) {
         UE_LOG(LogTemp, Error, TEXT("❌ Montage为空"));
         return false;
@@ -1916,20 +1618,16 @@ bool AWukongCharacter::PlayMontageSafe(UAnimMontage* Montage, float InPlayRate, 
         return false;
     }
 
-    // 📊 参数信息
     UE_LOG(LogTemp, Warning, TEXT("📊 播放参数: Montage=%s, PlayRate=%.1f, StartSection=%s"),
         *GetNameSafe(Montage), InPlayRate, *StartSection.ToString());
 
-    // 🎯 段落跳转（如果指定了起始段落）
     if (StartSection != NAME_None) {
         AnimInst->Montage_JumpToSection(StartSection, Montage);
         UE_LOG(LogTemp, Warning, TEXT("🎯 已跳转到段落: %s"), *StartSection.ToString());
     }
 
-    // 🎬 执行播放
     float Played = AnimInst->Montage_Play(Montage, InPlayRate);
 
-    // 📈 结果分析
     FName ActualSection = AnimInst->Montage_GetCurrentSection(Montage);
     float TotalLength = Montage->GetPlayLength();
     float ActualPlayTime = Played > 0.0f ? TotalLength / InPlayRate : 0.0f;
@@ -1939,13 +1637,10 @@ bool AWukongCharacter::PlayMontageSafe(UAnimMontage* Montage, float InPlayRate, 
 
     bool Success = Played > 0.0f;
 
-    // 🔗 如果播放成功，为这个动画绑定结束回调
     if (Success) {
         FOnMontageEnded MontageEndedDelegate;
 
-        // 根据动画类型绑定不同的回调
         if (Montage == HeavyAttackMontage) {
-            // 重攻击的回调
             MontageEndedDelegate.BindLambda([this](UAnimMontage* EndedMontage, bool bInterrupted) {
                 if (!bInterrupted) {
                     CurrentActionState = EWukongActionState::Idle;
@@ -1957,7 +1652,6 @@ bool AWukongCharacter::PlayMontageSafe(UAnimMontage* Montage, float InPlayRate, 
                 });
         }
         else {
-            // 轻攻击的回调（使用原来的）
             MontageEndedDelegate.BindUObject(this, &AWukongCharacter::OnLightAttackMontageEnded);
         }
 
@@ -1976,9 +1670,7 @@ bool AWukongCharacter::PlayMontageSafe(UAnimMontage* Montage, float InPlayRate, 
 // ==========================================
 
 void AWukongCharacter::FixAnimationBlueprintVariables() {
-    // 简化的动画蓝图防护：只设置最关键的变量防止除零
     if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance()) {
-        // 同步攻击状态 - 确保动画蓝图和C++代码的攻击状态一致
         if (PrimaryMeleeMontage && AnimInst->Montage_IsPlaying(PrimaryMeleeMontage)) {
             bMyIsAttacking = true;
         }
@@ -1986,32 +1678,26 @@ void AWukongCharacter::FixAnimationBlueprintVariables() {
             bMyIsAttacking = false;
         }
 
-        // 确保AtttackMyCount不为0（防止除零错误）
         if (AtttackMyCount == 0 && bMyIsAttacking) {
             AtttackMyCount = 1;
         }
 
-        // 设置基本的安全变量
         AnimInst->SetMorphTarget(FName(TEXT("Speed")), FMath::Max(GetVelocity().Size(), 0.1f));
         AnimInst->SetMorphTarget(FName(TEXT("ComboIndex")), (float)CurrentLightComboIndex);
     }
 }
 
-// ==========================================
-// 防止动画蓝图除零错误的保护措施
-// ==========================================
-
 void AWukongCharacter::PreventAnimationBlueprintDivisionByZero() {
 
 }
-
 // ==========================================
 // 输入绑定 (SetupPlayerInputComponent)
 // ==========================================
 
 void AWukongCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) {
     Super::SetupPlayerInputComponent(PlayerInputComponent);
-    // 先防止 Action 为空导致"blank action"警告 
+    InputComponent->BindKey(EKeys::P, IE_Pressed, this, &AWukongCharacter::OnTogglePauseMenu);
+    PlayerInputComponent->BindKey(EKeys::I, IE_Pressed, this, &AWukongCharacter::OnToggleInventory);
     if (!MoveAction) {
         MoveAction = NewObject<UInputAction>(this, TEXT("IA_Move"));
         MoveAction->ValueType = EInputActionValueType::Axis2D;
@@ -2035,38 +1721,46 @@ void AWukongCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
     if (!HeavyAttackAction) {
         HeavyAttackAction = NewObject<UInputAction>(this, TEXT("IA_Heavy"));
     }
+    if (!ToggleInvisibilityAction) {
+        ToggleInvisibilityAction = NewObject<UInputAction>(this, TEXT("IA_Invisibility"));
+        ToggleInvisibilityAction->ValueType = EInputActionValueType::Boolean;
+    }
+    if (!TransformAction) {
+        TransformAction = NewObject<UInputAction>(this, TEXT("IA_Transform"));
+        TransformAction->ValueType = EInputActionValueType::Boolean;
+        UE_LOG(LogTemp, Warning, TEXT("🌀 创建TransformAction"));
+    }
     if (!TestDamageAction) {
         TestDamageAction = NewObject<UInputAction>(this, TEXT("IA_TestDamage"));
         TestDamageAction->ValueType = EInputActionValueType::Boolean;
-        UE_LOG(LogTemp, Warning, TEXT("🆕 创建TestDamageAction"));
-    }
-    else {
-        UE_LOG(LogTemp, Warning, TEXT("✅ TestDamageAction已存在"));
     }
     if (!TestDeathAction) {
         TestDeathAction = NewObject<UInputAction>(this, TEXT("IA_TestDeath"));
         TestDeathAction->ValueType = EInputActionValueType::Boolean;
-        UE_LOG(LogTemp, Warning, TEXT("🆕 创建TestDeathAction"));
-    }
-    else {
-        UE_LOG(LogTemp, Warning, TEXT("✅ TestDeathAction已存在"));
     }
     if (!TestRespawnAction) {
         TestRespawnAction = NewObject<UInputAction>(this, TEXT("IA_TestRespawn"));
         TestRespawnAction->ValueType = EInputActionValueType::Boolean;
-        UE_LOG(LogTemp, Warning, TEXT("🆕 创建TestRespawnAction"));
-    }
-    else {
-        UE_LOG(LogTemp, Warning, TEXT("✅ TestRespawnAction已存在"));
     }
     if (!TestDetectAction) {
         TestDetectAction = NewObject<UInputAction>(this, TEXT("IA_TestDetect"));
         TestDetectAction->ValueType = EInputActionValueType::Boolean;
-        UE_LOG(LogTemp, Warning, TEXT("🆕 创建TestDetectAction"));
     }
-    else {
-        UE_LOG(LogTemp, Warning, TEXT("✅ TestDetectAction已存在"));
+    if (!TestCollisionAction) { // 🆕 添加测试碰撞检测动作
+        TestCollisionAction = NewObject<UInputAction>(this, TEXT("IA_TestCollision"));
+        TestCollisionAction->ValueType = EInputActionValueType::Boolean;
     }
+    // 镜头抖动测试
+    if (!CameraShakeAction)
+    {
+        CameraShakeAction = NewObject<UInputAction>(this, TEXT("IA_CameraShake"));
+        CameraShakeAction->ValueType = EInputActionValueType::Boolean;
+        UE_LOG(LogTemp, Warning, TEXT("🆕 创建 CameraShakeAction"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("✅ CameraShakeAction 已存在"));
+    }//新加的
     if (APlayerController* PC = Cast<APlayerController>(GetController())) {
         if (ULocalPlayer* LP = PC->GetLocalPlayer()) {
             if (auto* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LP)) {
@@ -2104,16 +1798,21 @@ void AWukongCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
                     InputMappingContext->MapKey(SprintAction, EKeys::LeftShift);
                     InputMappingContext->MapKey(DodgeAction, EKeys::F);
                     InputMappingContext->MapKey(HeavyAttackAction, EKeys::RightMouseButton);
+                    InputMappingContext->MapKey(ToggleInvisibilityAction, EKeys::V);
+                    InputMappingContext->MapKey(TransformAction, EKeys::R); // 🌀 变身按键
 
-                    // 测试功能按键映射
                     InputMappingContext->MapKey(TestDamageAction, EKeys::T);
                     InputMappingContext->MapKey(TestDeathAction, EKeys::Y);
                     InputMappingContext->MapKey(TestRespawnAction, EKeys::U);
                     InputMappingContext->MapKey(TestDetectAction, EKeys::G);
+                    InputMappingContext->MapKey(TestCollisionAction, EKeys::H); // 🆕 测试碰撞检测按键
 
                     // 新增功能按键映射
                     InputMappingContext->MapKey(StunSkillAction, EKeys::Q);
                     InputMappingContext->MapKey(DrinkPotionAction, EKeys::E);
+
+                    // 镜头抖动（J）
+                    InputMappingContext->MapKey(CameraShakeAction, EKeys::J);//
                 }
                 Subsystem->AddMappingContext(InputMappingContext, 100);
                 UE_LOG(LogTemp, Warning, TEXT("Runtime IMC applied in Setup. MappingCount=%d"), InputMappingContext->GetMappings().Num());
@@ -2141,41 +1840,70 @@ void AWukongCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
         if (DodgeAction)
             EnhancedInputComponent->BindAction(DodgeAction, ETriggerEvent::Started, this, &AWukongCharacter::Dodge);
         if (HeavyAttackAction) {
-            // 蓄力系统：按下开始蓄力，松开释放攻击
             EnhancedInputComponent->BindAction(HeavyAttackAction, ETriggerEvent::Started, this, &AWukongCharacter::StartHeavyCharge);
             EnhancedInputComponent->BindAction(HeavyAttackAction, ETriggerEvent::Completed, this, &AWukongCharacter::ReleaseHeavyAttack);
+        }
+        if (ToggleInvisibilityAction) {
+            EnhancedInputComponent->BindAction(ToggleInvisibilityAction, ETriggerEvent::Started, this, &AWukongCharacter::ToggleInvisibility);
+        }
+
+        // 🌀 变身按键绑定
+        if (TransformAction) {
+            EnhancedInputComponent->BindAction(TransformAction, ETriggerEvent::Started, this, &AWukongCharacter::TriggerTransform);
+            UE_LOG(LogTemp, Warning, TEXT("🔗 绑定变身按键 (R键)"));
+        }
+        else {
+            UE_LOG(LogTemp, Error, TEXT("❌ TransformAction 为空！"));
         }
 
         // 测试功能绑定
         if (TestDamageAction) {
             EnhancedInputComponent->BindAction(TestDamageAction, ETriggerEvent::Started, this, &AWukongCharacter::TestTakeDamage);
-            UE_LOG(LogTemp, Warning, TEXT("🔗 绑定测试伤害按键 (T键)"));
         }
         else {
             UE_LOG(LogTemp, Error, TEXT("❌ TestDamageAction 为空！"));
         }
         if (TestDeathAction) {
             EnhancedInputComponent->BindAction(TestDeathAction, ETriggerEvent::Started, this, &AWukongCharacter::TestDie);
-            UE_LOG(LogTemp, Warning, TEXT("🔗 绑定测试死亡按键 (Y键)"));
         }
         else {
             UE_LOG(LogTemp, Error, TEXT("❌ TestDeathAction 为空！"));
         }
         if (TestRespawnAction) {
             EnhancedInputComponent->BindAction(TestRespawnAction, ETriggerEvent::Started, this, &AWukongCharacter::TestRespawn);
-            UE_LOG(LogTemp, Warning, TEXT("🔗 绑定测试重生按键 (U键)"));
         }
         else {
             UE_LOG(LogTemp, Error, TEXT("❌ TestRespawnAction 为空！"));
         }
         if (TestDetectAction) {
             EnhancedInputComponent->BindAction(TestDetectAction, ETriggerEvent::Started, this, &AWukongCharacter::TestFrontDetection);
-            UE_LOG(LogTemp, Warning, TEXT("🔗 绑定测试检测按键 (G键)"));
         }
         else {
             UE_LOG(LogTemp, Error, TEXT("❌ TestDetectAction 为空！"));
         }
+        // 🆕 测试碰撞检测绑定
+        if (TestCollisionAction) {
+            EnhancedInputComponent->BindAction(TestCollisionAction, ETriggerEvent::Started, this, &AWukongCharacter::TestCollisionDetection);
+            UE_LOG(LogTemp, Warning, TEXT("🔗 绑定碰撞检测测试按键 (H键)"));
+        }
+        else {
+            UE_LOG(LogTemp, Error, TEXT("❌ TestCollisionAction 为空！"));
+        }// 镜头抖动绑定
+        if (CameraShakeAction)
+        {
+            EnhancedInputComponent->BindAction(
+                CameraShakeAction,
+                ETriggerEvent::Started,
+                this,
+                &AWukongCharacter::OnPressJ_ShakeCamera
+            );
 
+            UE_LOG(LogTemp, Warning, TEXT("🔗 绑定镜头抖动按键 (J键)"));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("❌ CameraShakeAction 为空！"));
+        }//新加的
         // 新增功能绑定
         if (StunSkillAction) {
             EnhancedInputComponent->BindAction(StunSkillAction, ETriggerEvent::Started, this, &AWukongCharacter::StunSkill);
@@ -2192,6 +1920,7 @@ void AWukongCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
         else {
             UE_LOG(LogTemp, Error, TEXT("❌ DrinkPotionAction 为空！"));
         }
+
     }
     else
     {
@@ -2199,7 +1928,379 @@ void AWukongCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
     }
 }
 
-// 执行定身技能
+void AWukongCharacter::ReceiveDamage(float DamageAmount)
+{
+    CurrentHealth -= DamageAmount;
+
+    if (CurrentHealth < 0.0f) CurrentHealth = 0.0f;
+
+    if (MyPlayerHUD)
+    {
+        float Percent = CurrentHealth / MaxHealth;
+        MyPlayerHUD->UpdateHealth(CurrentHealth, MaxHealth);
+    }
+}
+
+void AWukongCharacter::UseSkill(float ManaCost)
+{
+    CurrentStamina -= ManaCost;
+
+    if (CurrentStamina < 0.0f) CurrentStamina = 0.0f;
+
+    if (MyPlayerHUD)
+    {
+        MyPlayerHUD->UpdateMana(CurrentStamina, MaxStamina);
+    }
+}
+
+void  AWukongCharacter::useskillslot()
+{
+    MyPlayerHUD->TriggerSkillCooldown(3.0);
+}
+
+// ==========================================
+// 🎭 隐身系统实现
+// ==========================================
+
+void AWukongCharacter::ToggleInvisibility()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🎭 ===== TOGGLE INVISIBILITY ====="));
+    UseSkill(DodgeStaminaCost);
+    if (!bCanToggleInvisibility || CurrentStamina < DodgeStaminaCost) {
+        UE_LOG(LogTemp, Warning, TEXT("⏰ 隐身正在冷却中，无法切换"));
+        return;
+    }
+
+    bIsInvisible = !bIsInvisible;
+    SetInvisibility(bIsInvisible);
+
+    bCanToggleInvisibility = false;
+    GetWorldTimerManager().SetTimer(
+        InvisibilityCooldownTimerHandle,
+        this,
+        &AWukongCharacter::EndInvisibilityCooldown,
+        InvisibilityCooldown,
+        false
+    );
+
+    UE_LOG(LogTemp, Warning, TEXT("✅ 隐身状态已切换: %s"), bIsInvisible ? TEXT("隐身") : TEXT("显形"));
+}
+
+void AWukongCharacter::SetInvisibility(bool bInvisible)
+{
+    UE_LOG(LogTemp, Warning, TEXT("🎭 ===== SET INVISIBILITY ====="));
+    UE_LOG(LogTemp, Warning, TEXT("📊 参数: bInvisible=%d"), bInvisible);
+
+    USkeletalMeshComponent* MeshComponent = GetMesh();
+    UCapsuleComponent* CapsuleComp = GetCapsuleComponent();
+
+    if (!MeshComponent || !CapsuleComp) {
+        UE_LOG(LogTemp, Error, TEXT("❌ 无法获取网格或碰撞组件"));
+        return;
+    }
+
+    if (OriginalMaterials.Num() == 0) {
+        SaveOriginalMaterials();
+    }
+
+    if (bInvisible) {
+        UE_LOG(LogTemp, Warning, TEXT("🌫️ 进入隐身状态"));
+        CurrentActionState = EWukongActionState::Invisible;
+
+        MeshComponent->SetVisibility(false);
+        CapsuleComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+
+        for (int32 i = 0; i < MeshComponent->GetNumMaterials(); i++) {
+            UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(MeshComponent->GetMaterial(i), this);
+            if (DynamicMaterial) {
+                DynamicMaterial->SetScalarParameterValue(TEXT("Opacity"), 0.2f);
+                MeshComponent->SetMaterial(i, DynamicMaterial);
+            }
+        }
+
+        if (GetCharacterMovement()) {
+            GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+        }
+    }
+    else {
+        UE_LOG(LogTemp, Warning, TEXT("👤 退出隐身状态"));
+        CurrentActionState = EWukongActionState::Idle;
+
+        MeshComponent->SetVisibility(true);
+        CapsuleComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+
+        if (OriginalMaterials.Num() > 0) {
+            for (int32 i = 0; i < OriginalMaterials.Num() && i < MeshComponent->GetNumMaterials(); ++i) {
+                if (OriginalMaterials[i]) {
+                    MeshComponent->SetMaterial(i, OriginalMaterials[i]);
+                }
+            }
+        }
+
+        if (GetCharacterMovement()) {
+            GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+        }
+    }
+}
+
+void AWukongCharacter::SaveOriginalMaterials()
+{
+    UE_LOG(LogTemp, Warning, TEXT("💾 保存原始材质"));
+
+    USkeletalMeshComponent* MeshComponent = GetMesh();
+    if (MeshComponent) {
+        OriginalMaterials.Empty();
+
+        for (int32 i = 0; i < MeshComponent->GetNumMaterials(); i++) {
+            OriginalMaterials.Add(MeshComponent->GetMaterial(i));
+            UE_LOG(LogTemp, Warning, TEXT("  材质槽 %d: %s"), i,
+                OriginalMaterials[i] ? *OriginalMaterials[i]->GetName() : TEXT("空"));
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("✅ 保存了 %d 个原始材质"), OriginalMaterials.Num());
+    }
+    else {
+        UE_LOG(LogTemp, Error, TEXT("❌ 无法获取网格组件"));
+    }
+}
+
+void AWukongCharacter::EndInvisibilityCooldown()
+{
+    bCanToggleInvisibility = true;
+    UE_LOG(LogTemp, Warning, TEXT("✅ 隐身冷却结束，可以再次切换"));
+}
+
+// ==========================================
+// 🌀 变身系统实现
+// ==========================================
+
+void AWukongCharacter::TriggerTransform()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🌀 ===== TRIGGER TRANSFORM ====="));
+
+    if (bIsDead)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 死亡状态无法变身"));
+        return;
+    }
+
+    // 检查是否正在执行其他动作
+    if (CurrentActionState == EWukongActionState::Dodge ||
+        CurrentActionState == EWukongActionState::HeavyAttack ||
+        CurrentActionState == EWukongActionState::LightAttack ||
+        CurrentActionState == EWukongActionState::Sprint)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 正在执行其他动作，无法变身"));
+        return;
+    }
+    UseSkill(TransformStaminaCost);
+
+    // ③ 再次检查体力是否足够
+    if (CurrentStamina < TransformStaminaCost)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 变身失败：体力不足"));
+        return;
+    }
+    if (bIsTransformed)
+    {
+        // 如果已经变身，则结束变身
+        TransformEnd();
+    }
+    else
+    {
+        // 开始变身
+        TransformStart();
+    }
+}
+
+void AWukongCharacter::TransformStart()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🌀 ===== TRANSFORM START ====="));
+
+    if (bIsTransformed)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 已经是变身状态"));
+        return;
+    }
+
+    // 设置状态
+    CurrentActionState = EWukongActionState::TransformStart;
+    bIsTransformed = true;
+
+    // 保存原始大小
+    OriginalScale = GetActorScale3D();
+
+    // 应用变身大小
+    FVector NewScale = OriginalScale * TransformScaleMultiplier;
+    SetActorScale3D(NewScale);
+
+    // 生成粒子效果
+    SpawnTransformParticle();
+
+    // 更新状态为变身完成
+    CurrentActionState = EWukongActionState::Transformed;
+
+    // 设置变身结束定时器
+    GetWorldTimerManager().SetTimer(
+        TransformTimerHandle,
+        this,
+        &AWukongCharacter::TransformEnd,
+        TransformDuration,
+        false
+    );
+
+    UE_LOG(LogTemp, Warning, TEXT("✅ 变身开始: 原始大小(%.2f,%.2f,%.2f) -> 新大小(%.2f,%.2f,%.2f)"),
+        OriginalScale.X, OriginalScale.Y, OriginalScale.Z,
+        NewScale.X, NewScale.Y, NewScale.Z);
+}
+
+void AWukongCharacter::TransformEnd()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🌀 ===== TRANSFORM END ====="));
+
+    if (!bIsTransformed)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 不是变身状态"));
+        return;
+    }
+
+    // 恢复原始大小
+    SetActorScale3D(OriginalScale);
+
+    // 重置状态
+    CurrentActionState = EWukongActionState::TransformEnd;
+    bIsTransformed = false;
+
+    // 清理计时器
+    GetWorldTimerManager().ClearTimer(TransformTimerHandle);
+
+    // 稍后回到空闲状态
+    GetWorldTimerManager().SetTimer(
+        TransformTimerHandle,
+        [this]() {
+            CurrentActionState = EWukongActionState::Idle;
+            UE_LOG(LogTemp, Warning, TEXT("✅ 变身完全结束，回到空闲状态"));
+        },
+        0.5f,
+        false
+    );
+
+    UE_LOG(LogTemp, Warning, TEXT("✅ 变身结束: 大小恢复为(%.2f,%.2f,%.2f)"),
+        OriginalScale.X, OriginalScale.Y, OriginalScale.Z);
+}
+
+void AWukongCharacter::SpawnTransformParticle()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🌀 ===== SPAWN TRANSFORM PARTICLE ====="));
+
+    if (!TransformParticleEffect)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 未设置变身粒子效果，请检查TransformParticleEffect变量"));
+        return;
+    }
+
+    // 获取角色的位置
+    FVector SpawnLocation = GetActorLocation();
+
+    // 创建粒子系统组件
+    UParticleSystemComponent* ParticleComponent = UGameplayStatics::SpawnEmitterAtLocation(
+        GetWorld(),
+        TransformParticleEffect,
+        SpawnLocation,
+        FRotator::ZeroRotator,
+        FVector(TransformScaleMultiplier) // 根据变身大小调整粒子大小
+    );
+
+    if (ParticleComponent)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("✅ 变身粒子效果已生成: %s"), *TransformParticleEffect->GetName());
+        UE_LOG(LogTemp, Warning, TEXT("📍 生成位置: (%.1f,%.1f,%.1f)"),
+            SpawnLocation.X, SpawnLocation.Y, SpawnLocation.Z);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ 无法生成变身粒子效果"));
+    }
+}
+
+// ==========================================
+// 重攻击函数（兼容性）
+// ==========================================
+
+void AWukongCharacter::HeavyAttack()
+{
+    // 1. 检查冷却状态
+    if (bIsHeavyAttackOnCooldown)
+    {
+        // 可以显示剩余冷却时间
+        if (GetWorld())
+        {
+            float RemainingTime = GetWorld()->GetTimerManager().GetTimerRemaining(HeavyAttackCooldownTimerHandle);
+            UE_LOG(LogTemp, Warning, TEXT("⚠️ 重攻击冷却中，剩余: %.1f秒"), RemainingTime);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("⚠️ 重攻击冷却中"));
+        }
+        return;
+    }
+
+    // 2. 检查体力
+    if (CurrentStamina < HeavyAttackStaminaCost)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ 重攻击被阻止: 体力不足"));
+        return;
+    }
+
+    // 3. 执行攻击
+    ExecuteHeavyAttack(1.0f);
+
+    // 4. 启动冷却（必须在攻击执行后调用！）
+    StartHeavyAttackCooldown();
+
+    // 5. 消耗体力
+    CurrentStamina -= HeavyAttackStaminaCost;
+
+    UE_LOG(LogTemp, Log, TEXT("重攻击执行成功，开始冷却"));
+}
+
+void AWukongCharacter::StartHeavyAttackCooldown()
+{
+    if (!bIsHeavyAttackOnCooldown)
+    {
+        bIsHeavyAttackOnCooldown = true;
+
+        if (GetWorld())
+        {
+            // 设置计时器，3秒后结束冷却
+            GetWorld()->GetTimerManager().SetTimer(
+                HeavyAttackCooldownTimerHandle,
+                this,
+                &AWukongCharacter::OnHeavyAttackCooldownEnd,
+                HeavyAttackCooldownTime,
+                false // 不循环，只执行一次
+            );
+
+            UE_LOG(LogTemp, Log, TEXT("重攻击开始冷却，冷却时间: %f秒"), HeavyAttackCooldownTime);
+        }
+    }
+}
+
+void AWukongCharacter::OnHeavyAttackCooldownEnd()
+{
+    bIsHeavyAttackOnCooldown = false;
+    UE_LOG(LogTemp, Log, TEXT("重攻击冷却结束"));
+
+    // 可选：播放音效或视觉效果提示冷却结束
+    // PlayCoolDownEndEffect();
+}
+void AWukongCharacter::PlayHeavyAttackMontage()
+{
+    if (HeavyAttackMontage)
+    {
+        PlayMontageSafe(HeavyAttackMontage, 1.0f, FName(TEXT("Default")));
+    }
+}
 void AWukongCharacter::StunSkill()
 {
     UE_LOG(LogTemp, Warning, TEXT("🎯 ===== STUN SKILL TRIGGERED ====="));
@@ -2226,42 +2327,37 @@ void AWukongCharacter::StunSkill()
     // 设置状态为定身技能使用中
     CurrentActionState = EWukongActionState::Stun;
 
-    // 检测前方敌人
-    FVector ForwardVector = GetActorForwardVector();
-    FVector StartLocation = GetActorLocation() + FVector(0, 0, 50); // 稍微抬高起点
-    FVector EndLocation = StartLocation + ForwardVector * StunSkillRange;
+    // 🆕 使用新的碰撞检测系统
+    TArray<AActor*> Enemies = DetectEnemiesInRange(StunSkillRange, EAttackDetectionType::Line);
 
-    // 使用球形重叠检测敌人
-    TArray<FHitResult> HitResults;
-    FCollisionShape CollisionShape = FCollisionShape::MakeSphere(100.f); // 检测半径
-    FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor(this); // 忽略自己
+    if (Enemies.Num() > 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("🎯 定身技能命中 %d 个目标"), Enemies.Num());
 
-    bool bHit = GetWorld()->SweepMultiByChannel(
-        HitResults,
-        StartLocation,
-        EndLocation,
-        FQuat::Identity,
-        ECC_Pawn,
-        CollisionShape,
-        QueryParams
-    );
+        for (AActor* Enemy : Enemies)
+        {
+            if (IsValid(Enemy))
+            {
+                AParagonFengMao* FengMaoEnemy = Cast<AParagonFengMao>(Enemy);
+                if (FengMaoEnemy && !FengMaoEnemy->bIsDead)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("💫 对敌人 %s 施加定身效果"), *FengMaoEnemy->GetName());
+                    ApplyStunToTarget(FengMaoEnemy);
 
-    if (bHit && HitResults.Num() > 0) {
-        UE_LOG(LogTemp, Warning, TEXT("🎯 检测到前方有 %d 个目标"), HitResults.Num());
+                    // 同时造成伤害
+                    FDamageEvent DamageEvent;
+                    FHitResult HitResult;
+                    FPointDamageEvent PointDamageEvent(StunSkillDamage, HitResult, GetActorForwardVector(), nullptr);
+                    FengMaoEnemy->TakeDamage(StunSkillDamage, PointDamageEvent, nullptr, this);
 
-        // 对每个击中的敌人施加定身效果
-        for (const FHitResult& Hit : HitResults) {
-            if (Hit.GetActor() && Hit.GetActor() != this) {
-                AParagonFengMao* Enemy = Cast<AParagonFengMao>(Hit.GetActor());
-                if (Enemy && !Enemy->bIsDead) {
-                    UE_LOG(LogTemp, Warning, TEXT("💫 对敌人 %s 施加定身效果"), *Enemy->GetName());
-                    ApplyStunToTarget(Enemy);
+                    // 显示伤害数字
+                    ShowDamageNumbers(FengMaoEnemy->GetActorLocation() + FVector(0, 0, 100), StunSkillDamage, false);
                 }
             }
         }
     }
-    else {
+    else
+    {
         UE_LOG(LogTemp, Warning, TEXT("⚠️ 前方没有检测到敌人"));
     }
 
@@ -2382,6 +2478,9 @@ void AWukongCharacter::DrinkPotion()
     CurrentHealth = FMath::Min(CurrentHealth, MaxHealth);
     UE_LOG(LogTemp, Warning, TEXT("💚 瞬间回复 %.1f 生命值，当前生命: %.1f/%.1f"), HealAmount, CurrentHealth, MaxHealth);
 
+    // 🆕 显示治疗数字
+    ShowDamageNumbers(GetActorLocation() + FVector(0, 0, 100), HealAmount, true);
+
     // 设置喝药结束定时器
     GetWorldTimerManager().SetTimer(
         DodgeTimerHandle, // 复用计时器
@@ -2413,6 +2512,9 @@ void AWukongCharacter::StartDrinkingPotion()
                 CurrentHealth += HealAmount;
                 CurrentHealth = FMath::Min(CurrentHealth, MaxHealth);
                 UE_LOG(LogTemp, Warning, TEXT("💚 持续回复 %.1f 生命值，当前生命: %.1f/%.1f"), HealAmount, CurrentHealth, MaxHealth);
+
+                // 🆕 显示小的治疗数字
+                ShowDamageNumbers(GetActorLocation() + FVector(FMath::RandRange(-20, 20), FMath::RandRange(-20, 20), 100), HealAmount, true);
             }
         },
         OverTimeHealInterval,
@@ -2444,4 +2546,644 @@ void AWukongCharacter::FinishDrinkingPotion()
     }
 
     UE_LOG(LogTemp, Warning, TEXT("🧪 持续回复结束"));
+}
+
+void AWukongCharacter::OnTogglePauseMenu()
+{
+    // 1. 获取控制当前角色的 PlayerController
+    // 因为 SetInputMode 和 ShowMouseCursor 都在 Controller 里
+    APlayerController* PC = Cast<APlayerController>(GetController());
+
+    if (!PC) return; // 如果是被 AI 控制或者没有 Controller，直接返回
+
+    // --- 逻辑 A: 如果游戏已经暂停，则视为"继续游戏" ---
+    if (UGameplayStatics::IsGamePaused(this))
+    {
+        // 移除 UI
+        if (PauseMenuInstance)
+        {
+            PauseMenuInstance->RemoveFromParent();
+        }
+
+        // 恢复游戏状态
+        UGameplayStatics::SetGamePaused(this, false);
+        PC->SetInputMode(FInputModeGameOnly());
+        PC->SetShowMouseCursor(false);
+        return;
+    }
+
+    // --- 逻辑 B: 如果游戏未暂停，则显示菜单 ---
+
+    // 1. 懒加载：如果没有创建过 Widget，就创建一次
+    if (!PauseMenuInstance)
+    {
+        // CreateWidget 第一个参数通常传 PlayerController，但在 Character 里传 this 也可以，UE 会自动找 World
+        PauseMenuInstance = CreateWidget<UPauseMenuWidget>(PC, UPauseMenuWidget::StaticClass());
+    }
+
+    // 2. 显示并暂停
+    if (PauseMenuInstance)
+    {
+        PauseMenuInstance->AddToViewport(100); // 层级设高一点
+
+        UGameplayStatics::SetGamePaused(this, true);
+
+        // 设置输入模式：仅允许 UI 操作，并且不锁定鼠标
+        FInputModeUIOnly InputMode;
+        InputMode.SetWidgetToFocus(PauseMenuInstance->TakeWidget());
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+
+        PC->SetInputMode(InputMode);
+        PC->SetShowMouseCursor(true);
+    }
+}
+// ==========================================
+// 🆕 碰撞检测系统实现
+// ==========================================
+
+// 🎯 检测范围内的敌人（通用接口）
+TArray<AActor*> AWukongCharacter::DetectEnemiesInRange(float Radius, EAttackDetectionType DetectionType)
+{
+    UE_LOG(LogTemp, Warning, TEXT("🎯 ===== 开始碰撞检测 ====="));
+    UE_LOG(LogTemp, Warning, TEXT("📊 参数: 半径=%.1f, 类型=%d"), Radius, (int32)DetectionType);
+
+    TArray<AActor*> DetectedEnemies;
+
+    switch (DetectionType)
+    {
+    case EAttackDetectionType::Circle:
+        DetectedEnemies = CircleDetection(Radius);
+        break;
+    case EAttackDetectionType::Sector:
+        DetectedEnemies = SectorDetection(Radius, DefaultAttackAngle);
+        break;
+    case EAttackDetectionType::Line:
+        DetectedEnemies = LineDetection(Radius, Radius * 0.2f); // 宽度为半径的20%
+        break;
+    case EAttackDetectionType::Sphere:
+        DetectedEnemies = SphereDetection(Radius);
+        break;
+    default:
+        DetectedEnemies = CircleDetection(Radius);
+        break;
+    }
+
+    // 保存最后检测到的敌人列表
+    LastDetectedEnemies = DetectedEnemies;
+
+    // 绘制调试可视化
+    if (bShowDebugVisuals && GetWorld())
+    {
+        FVector DetectionCenter = GetActorLocation() + (GetActorForwardVector() * (Radius * 0.5f));
+        DetectionCenter.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 0.5f;
+
+        FColor DebugColor = FColor::Green;
+        if (DetectedEnemies.Num() == 0)
+            DebugColor = FColor::Red;
+        else if (DetectedEnemies.Num() >= 3)
+            DebugColor = FColor::Yellow;
+
+        DrawDebugDetectionShape(DetectionType, DetectionCenter, FVector(Radius, 0, 0), GetActorRotation(), DebugColor, 2.0f);
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("🎯 检测完成: 发现 %d 个敌人"), DetectedEnemies.Num());
+    return DetectedEnemies;
+}
+
+// 🎯 圆形检测
+TArray<AActor*> AWukongCharacter::CircleDetection(float Radius)
+{
+    TArray<AActor*> EnemiesInRange;
+
+    // 使用球形重叠检测
+    TArray<FHitResult> HitResults;
+    FCollisionShape SphereShape = FCollisionShape::MakeSphere(Radius);
+
+    FVector DetectionCenter = GetActorLocation() + (GetActorForwardVector() * (Radius * 0.5f));
+    DetectionCenter.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 0.5f;
+
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this);
+    QueryParams.bTraceComplex = false;
+
+    bool bHit = GetWorld()->SweepMultiByChannel(
+        HitResults,
+        DetectionCenter,
+        DetectionCenter,
+        FQuat::Identity,
+        ECC_Pawn,
+        SphereShape,
+        QueryParams
+    );
+
+    if (bHit)
+    {
+        for (const FHitResult& Hit : HitResults)
+        {
+            AActor* HitActor = Hit.GetActor();
+            if (HitActor && HitActor != this)
+            {
+                // 检查是否是敌人（不仅仅是封魔敌人，兼容未来其他敌人）
+                if (HitActor->IsA(AParagonFengMao::StaticClass()) ||
+                    HitActor->ActorHasTag(FName("Enemy")))
+                {
+                    // 检查敌人是否存活
+                    AParagonFengMao* Enemy = Cast<AParagonFengMao>(HitActor);
+                    if (!Enemy || !Enemy->bIsDead)
+                    {
+                        EnemiesInRange.Add(HitActor);
+
+                        // 计算距离
+                        float Distance = FVector::Distance(GetActorLocation(), HitActor->GetActorLocation());
+                        UE_LOG(LogTemp, Warning, TEXT("   🔵 圆形检测命中: %s (距离: %.1f)"),
+                            *HitActor->GetName(), Distance);
+                    }
+                }
+            }
+        }
+    }
+
+    return EnemiesInRange;
+}
+
+// 🎯 扇形检测
+TArray<AActor*> AWukongCharacter::SectorDetection(float Radius, float AngleDegrees)
+{
+    TArray<AActor*> EnemiesInSector;
+
+    // 先进行圆形检测
+    TArray<AActor*> AllEnemiesInRange = CircleDetection(Radius);
+
+    if (AllEnemiesInRange.Num() == 0)
+    {
+        return EnemiesInSector;
+    }
+
+    // 筛选在扇形范围内的敌人
+    FVector PlayerForward = GetActorForwardVector();
+    FVector PlayerLocation = GetActorLocation();
+    float HalfAngle = AngleDegrees * 0.5f;
+    float CosHalfAngle = FMath::Cos(FMath::DegreesToRadians(HalfAngle));
+
+    for (AActor* Enemy : AllEnemiesInRange)
+    {
+        if (!Enemy) continue;
+
+        FVector ToEnemy = (Enemy->GetActorLocation() - PlayerLocation).GetSafeNormal();
+        float DotProduct = FVector::DotProduct(PlayerForward, ToEnemy);
+
+        // 检查是否在扇形范围内
+        if (DotProduct >= CosHalfAngle)
+        {
+            EnemiesInSector.Add(Enemy);
+
+            // 计算实际角度
+            float Angle = FMath::Acos(DotProduct) * (180.0f / PI);
+            UE_LOG(LogTemp, Warning, TEXT("   🔶 扇形检测命中: %s (角度: %.1f度)"),
+                *Enemy->GetName(), Angle);
+        }
+    }
+
+    return EnemiesInSector;
+}
+
+// 🎯 直线检测
+TArray<AActor*> AWukongCharacter::LineDetection(float Length, float Width)
+{
+    TArray<AActor*> EnemiesInLine;
+
+    // 使用胶囊体检测
+    FVector StartLocation = GetActorLocation() + FVector(0, 0, 50);
+    FVector EndLocation = StartLocation + (GetActorForwardVector() * Length);
+
+    TArray<FHitResult> HitResults;
+    FCollisionShape CapsuleShape = FCollisionShape::MakeCapsule(Width, Length * 0.5f);
+
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this);
+
+    bool bHit = GetWorld()->SweepMultiByChannel(
+        HitResults,
+        StartLocation,
+        EndLocation,
+        FQuat::Identity,
+        ECC_Pawn,
+        CapsuleShape,
+        QueryParams
+    );
+
+    if (bHit)
+    {
+        for (const FHitResult& Hit : HitResults)
+        {
+            AActor* HitActor = Hit.GetActor();
+            if (HitActor && HitActor != this)
+            {
+                // 检查是否是敌人
+                if (HitActor->IsA(AParagonFengMao::StaticClass()) ||
+                    HitActor->ActorHasTag(FName("Enemy")))
+                {
+                    // 检查敌人是否存活
+                    AParagonFengMao* Enemy = Cast<AParagonFengMao>(HitActor);
+                    if (!Enemy || !Enemy->bIsDead)
+                    {
+                        EnemiesInLine.Add(HitActor);
+
+                        float Distance = FVector::Distance(StartLocation, Hit.Location);
+                        UE_LOG(LogTemp, Warning, TEXT("   ➡️ 直线检测命中: %s (距离: %.1f)"),
+                            *HitActor->GetName(), Distance);
+                    }
+                }
+            }
+        }
+    }
+
+    return EnemiesInLine;
+}
+
+// 🎯 球形检测
+TArray<AActor*> AWukongCharacter::SphereDetection(float Radius)
+{
+    // 球形检测与圆形检测类似，但检测中心不同
+    TArray<AActor*> EnemiesInSphere;
+
+    // 使用球形重叠检测，检测中心在角色位置
+    TArray<FHitResult> HitResults;
+    FCollisionShape SphereShape = FCollisionShape::MakeSphere(Radius);
+
+    FVector DetectionCenter = GetActorLocation();
+    DetectionCenter.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 0.5f;
+
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this);
+    QueryParams.bTraceComplex = false;
+
+    bool bHit = GetWorld()->SweepMultiByChannel(
+        HitResults,
+        DetectionCenter,
+        DetectionCenter,
+        FQuat::Identity,
+        ECC_Pawn,
+        SphereShape,
+        QueryParams
+    );
+
+    if (bHit)
+    {
+        for (const FHitResult& Hit : HitResults)
+        {
+            AActor* HitActor = Hit.GetActor();
+            if (HitActor && HitActor != this)
+            {
+                // 检查是否是敌人
+                if (HitActor->IsA(AParagonFengMao::StaticClass()) ||
+                    HitActor->ActorHasTag(FName("Enemy")))
+                {
+                    // 检查敌人是否存活
+                    AParagonFengMao* Enemy = Cast<AParagonFengMao>(HitActor);
+                    if (!Enemy || !Enemy->bIsDead)
+                    {
+                        EnemiesInSphere.Add(HitActor);
+
+                        float Distance = FVector::Distance(DetectionCenter, HitActor->GetActorLocation());
+                        UE_LOG(LogTemp, Warning, TEXT("   🔘 球形检测命中: %s (距离: %.1f)"),
+                            *HitActor->GetName(), Distance);
+                    }
+                }
+            }
+        }
+    }
+
+    return EnemiesInSphere;
+}
+
+// 🎯 对检测到的敌人应用伤害
+void AWukongCharacter::ApplyDamageToDetectedEnemies(TArray<AActor*> Enemies, float BaseDamage, bool bIsHeavyAttack)
+{
+    if (Enemies.Num() == 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚔️ 没有敌人可造成伤害"));
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("⚔️ 对 %d 个敌人造成伤害 (基础伤害: %.1f, 重攻击: %s)"),
+        Enemies.Num(), BaseDamage, bIsHeavyAttack ? TEXT("是") : TEXT("否"));
+
+    for (AActor* Enemy : Enemies)
+    {
+        if (IsValid(Enemy))
+        {
+            // 检查是否是封魔敌人
+            AParagonFengMao* FengMaoEnemy = Cast<AParagonFengMao>(Enemy);
+            if (FengMaoEnemy && !FengMaoEnemy->bIsDead)
+            {
+                // 计算最终伤害
+                float FinalDamage = BaseDamage;
+                bool bIsCritical = (FMath::FRand() < CriticalHitChance);
+
+                if (bIsCritical)
+                {
+                    FinalDamage *= CriticalHitMultiplier;
+                    UE_LOG(LogTemp, Warning, TEXT("   💥 暴击！伤害倍率: %.1f"), CriticalHitMultiplier);
+                }
+
+                // 创建伤害事件
+                FDamageEvent DamageEvent;
+                FHitResult HitResult;
+                FPointDamageEvent PointDamageEvent(FinalDamage, HitResult, GetActorForwardVector(), nullptr);
+
+                // 应用伤害
+                float ActualDamage = FengMaoEnemy->TakeDamage(FinalDamage, PointDamageEvent, GetController(), this);
+
+                UE_LOG(LogTemp, Warning, TEXT("   ⚔️ 对 %s 造成 %.1f 伤害 (实际: %.1f), 剩余生命: %.1f"),
+                    *FengMaoEnemy->GetName(), FinalDamage, ActualDamage, FengMaoEnemy->CurrentHealth);
+
+                // 显示伤害数字
+                FVector DamageLocation = FengMaoEnemy->GetActorLocation() + FVector(0, 0, 100);
+                ShowDamageNumbers(DamageLocation, FinalDamage, bIsCritical);
+
+                // 如果是重攻击且伤害足够大，触发硬直效果
+                if (bIsHeavyAttack && FinalDamage >= 30.0f)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("   💥 重攻击触发硬直效果"));
+                    // 这里可以添加硬直逻辑
+                }
+            }
+        }
+    }
+}
+
+// 🎯 显示伤害数字（在游戏画面中显示）
+void AWukongCharacter::ShowDamageNumbers(FVector Location, float Damage, bool bIsCritical)
+{
+    if (!GetWorld()) return;
+
+    // 保存伤害数字信息
+    DamageNumberLocations.Add(Location);
+    DamageNumberValues.Add(Damage);
+    DamageNumberIsCritical.Add(bIsCritical);
+
+    // 使用DrawDebugString在游戏画面中显示伤害数字
+    FString DamageText = FString::Printf(TEXT("%.0f"), Damage);
+    FColor TextColor = bIsCritical ? FColor::Orange : FColor::White;
+    float TextScale = bIsCritical ? 2.0f : 1.5f;
+
+    // 在伤害位置上方显示数字
+    FVector TextLocation = Location + FVector(0, 0, 50);
+
+    // 使用DrawDebugString显示伤害数字
+    DrawDebugString(
+        GetWorld(),
+        TextLocation,
+        DamageText,
+        nullptr,
+        TextColor,
+        1.5f, // 显示时间（秒）
+        false, // 不绘制阴影
+        TextScale // 文字缩放
+    );
+
+    // 如果暴击，显示额外的效果
+    if (bIsCritical)
+    {
+        // 绘制暴击星号
+        DrawDebugString(
+            GetWorld(),
+            TextLocation + FVector(0, 0, 30),
+            TEXT("💥"),
+            nullptr,
+            FColor::Red,
+            1.5f,
+            false,
+            1.2f
+        );
+
+        // 绘制暴击效果圈
+        DrawDebugCircle(
+            GetWorld(),
+            Location,
+            30.0f,
+            8,
+            FColor::Orange,
+            false,
+            1.5f,
+            0,
+            2.0f
+        );
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("🔢 显示伤害数字: %.1f %s 在位置: %s"),
+        Damage, bIsCritical ? TEXT("(暴击)") : TEXT(""), *Location.ToString());
+}
+
+// 🎯 绘制调试检测形状
+void AWukongCharacter::DrawDebugDetectionShape(EAttackDetectionType DetectionType, FVector Center, FVector Extents, FRotator Rotation, FColor Color, float Duration)
+{
+    if (!GetWorld()) return;
+
+    switch (DetectionType)
+    {
+    case EAttackDetectionType::Circle:
+    {
+        // 绘制圆形
+        DrawDebugCircle(
+            GetWorld(),
+            Center,
+            Extents.X,
+            32,
+            Color,
+            false,
+            Duration,
+            0,
+            2.0f,
+            FVector(1, 0, 0),
+            FVector(0, 1, 0),
+            false
+        );
+        break;
+    }
+
+    case EAttackDetectionType::Sector:
+    {
+        // 绘制扇形
+        float AngleDegrees = DefaultAttackAngle;
+        float HalfAngle = FMath::DegreesToRadians(AngleDegrees * 0.5f);
+        int32 Segments = 16;
+
+        // 绘制扇形边缘
+        for (int32 i = 0; i <= Segments; i++)
+        {
+            float Angle = -HalfAngle + (2 * HalfAngle * i / Segments);
+            FVector Direction = Rotation.Vector().RotateAngleAxis(FMath::RadiansToDegrees(Angle), FVector(0, 0, 1));
+            FVector EndPoint = Center + Direction * Extents.X;
+
+            DrawDebugLine(
+                GetWorld(),
+                Center,
+                EndPoint,
+                Color,
+                false,
+                Duration,
+                0,
+                2.0f
+            );
+        }
+
+        // 绘制扇形弧线
+        for (int32 i = 0; i < Segments; i++)
+        {
+            float Angle1 = -HalfAngle + (2 * HalfAngle * i / Segments);
+            float Angle2 = -HalfAngle + (2 * HalfAngle * (i + 1) / Segments);
+
+            FVector Dir1 = Rotation.Vector().RotateAngleAxis(FMath::RadiansToDegrees(Angle1), FVector(0, 0, 1));
+            FVector Dir2 = Rotation.Vector().RotateAngleAxis(FMath::RadiansToDegrees(Angle2), FVector(0, 0, 1));
+
+            FVector Point1 = Center + Dir1 * Extents.X;
+            FVector Point2 = Center + Dir2 * Extents.X;
+
+            DrawDebugLine(
+                GetWorld(),
+                Point1,
+                Point2,
+                Color,
+                false,
+                Duration,
+                0,
+                2.0f
+            );
+        }
+        break;
+    }
+
+    case EAttackDetectionType::Line:
+    {
+        // 绘制直线（胶囊体）
+        FVector Start = Center - (Rotation.Vector() * Extents.Y);
+        FVector End = Center + (Rotation.Vector() * Extents.Y);
+
+        DrawDebugCapsule(
+            GetWorld(),
+            Center,
+            Extents.Y,
+            Extents.X,
+            Rotation.Quaternion(),
+            Color,
+            false,
+            Duration,
+            0,
+            2.0f
+        );
+        break;
+    }
+
+    case EAttackDetectionType::Sphere:
+    {
+        // 绘制球形
+        DrawDebugSphere(
+            GetWorld(),
+            Center,
+            Extents.X,
+            16,
+            Color,
+            false,
+            Duration,
+            0,
+            2.0f
+        );
+        break;
+    }
+    }
+}
+
+// 🎯 显示攻击范围调试信息
+void AWukongCharacter::ShowAttackRangeDebug(float Radius, EAttackDetectionType DetectionType, FColor Color, float Duration)
+{
+    UE_LOG(LogTemp, Warning, TEXT("👁️ 显示攻击范围调试: 半径=%.1f, 类型=%d"), Radius, (int32)DetectionType);
+
+    FVector DetectionCenter = GetActorLocation() + (GetActorForwardVector() * (Radius * 0.5f));
+    DetectionCenter.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 0.5f;
+
+    DrawDebugDetectionShape(DetectionType, DetectionCenter, FVector(Radius, 0, 0), GetActorRotation(), Color, Duration);
+}
+
+// 🎯 测试碰撞检测系统
+void AWukongCharacter::TestCollisionDetection()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🧪 ===== 测试碰撞检测系统 ====="));
+
+    // 测试所有检测类型
+    float TestRadius = 200.0f;
+
+    // 1. 测试圆形检测
+    UE_LOG(LogTemp, Warning, TEXT("1. 测试圆形检测"));
+    TArray<AActor*> CircleEnemies = DetectEnemiesInRange(TestRadius, EAttackDetectionType::Circle);
+    ShowAttackRangeDebug(TestRadius, EAttackDetectionType::Circle, FColor::Blue, 3.0f);
+
+    // 2. 测试扇形检测
+    UE_LOG(LogTemp, Warning, TEXT("2. 测试扇形检测"));
+    TArray<AActor*> SectorEnemies = DetectEnemiesInRange(TestRadius, EAttackDetectionType::Sector);
+    ShowAttackRangeDebug(TestRadius, EAttackDetectionType::Sector, FColor::Green, 3.0f);
+
+    // 3. 测试直线检测
+    UE_LOG(LogTemp, Warning, TEXT("3. 测试直线检测"));
+    TArray<AActor*> LineEnemies = DetectEnemiesInRange(TestRadius, EAttackDetectionType::Line);
+    ShowAttackRangeDebug(TestRadius, EAttackDetectionType::Line, FColor::Yellow, 3.0f);
+
+    // 4. 测试球形检测
+    UE_LOG(LogTemp, Warning, TEXT("4. 测试球形检测"));
+    TArray<AActor*> SphereEnemies = DetectEnemiesInRange(TestRadius, EAttackDetectionType::Sphere);
+    ShowAttackRangeDebug(TestRadius, EAttackDetectionType::Sphere, FColor::Purple, 3.0f);
+
+    // 汇总结果
+    UE_LOG(LogTemp, Warning, TEXT("📊 检测结果汇总:"));
+    UE_LOG(LogTemp, Warning, TEXT("   圆形检测: %d 个敌人"), CircleEnemies.Num());
+    UE_LOG(LogTemp, Warning, TEXT("   扇形检测: %d 个敌人"), SectorEnemies.Num());
+    UE_LOG(LogTemp, Warning, TEXT("   直线检测: %d 个敌人"), LineEnemies.Num());
+    UE_LOG(LogTemp, Warning, TEXT("   球形检测: %d 个敌人"), SphereEnemies.Num());
+
+    UE_LOG(LogTemp, Warning, TEXT("✅ 碰撞检测测试完成"));
+}
+
+// 🎯 测试整个检测系统
+void AWukongCharacter::TestDetectionSystem()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🔧 ===== 测试完整检测系统 ====="));
+
+    // 测试检测敌人
+    TestCollisionDetection();
+
+    // 测试伤害应用
+    TArray<AActor*> TestEnemies = DetectEnemiesInRange(DefaultAttackRadius, EAttackDetectionType::Circle);
+    if (TestEnemies.Num() > 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚔️ 测试伤害应用"));
+        ApplyDamageToDetectedEnemies(TestEnemies, 10.0f, false);
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("✅ 完整检测系统测试完成"));
+}
+//抖动函数实现
+void AWukongCharacter::OnPressJ_ShakeCamera()
+{
+    APlayerController* PC = Cast<APlayerController>(GetController());
+    if (!PC || !PC->PlayerCameraManager)
+        return;
+
+    UMyCameraModifier* Modifier =
+        Cast<UMyCameraModifier>(
+            PC->PlayerCameraManager->AddNewCameraModifier(
+                UMyCameraModifier::StaticClass()
+            )
+        );
+
+    if (Modifier)
+    {
+        // 持续 0.25 秒，强度 2.0
+        Modifier->StartShake(0.25f, 2.0f);
+    }
+}
+
+void AWukongCharacter::OnToggleInventory()
+{
+    if (MyPlayerHUD) MyPlayerHUD->ToggleInventory();
 }

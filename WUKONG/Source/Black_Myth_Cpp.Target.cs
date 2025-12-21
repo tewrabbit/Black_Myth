@@ -3,13 +3,13 @@
 using UnrealBuildTool;
 using System.Collections.Generic;
 
-public class WUkongPROJECTEditorTarget : TargetRules
+public class Black_Myth_CppTarget : TargetRules
 {
-	public WUkongPROJECTEditorTarget( TargetInfo Target) : base(Target)
+	public Black_Myth_CppTarget(TargetInfo Target) : base(Target)
 	{
-		Type = TargetType.Editor;
+		Type = TargetType.Game;
 		DefaultBuildSettings = BuildSettingsVersion.V6;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_7;
-		ExtraModuleNames.Add("WUkongPROJECT");
+		ExtraModuleNames.Add("Black_Myth_Cpp");
 	}
 }
