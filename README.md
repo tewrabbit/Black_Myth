@@ -1,62 +1,43 @@
-# 2025 期末项目：黑神话：悟空（Black Myth: Wukong） - 游戏复刻与设计
+# 黑神话：悟空 - 项目说明
 
-> **项目概述：** 本项目旨在基于 C++ 语言和 Unreal Engine (虚幻引擎)，复刻并实现国产动作 RPG 游戏《黑神话：悟空》的核心玩法机制。项目将重点考察面向对象设计能力、复杂类库的掌握，以及代码架构的优雅性。
+## 项目概述
+基于Unreal Engine 5和C++开发的动作角色扮演游戏，复刻《黑神话：悟空》核心玩法。
 
-## 核心信息与目标
+## 团队成员
+- 邹世豪：敌人AI与互动
+- 赵佑赫：主角核心动作系统
+- 罗强：UI系统
+- 齐欣然：游戏地图与关卡设计
 
-| 核心要素 | 详情 |
-| :--- | :--- | 
-| **选题名称** | 选题三：黑神话：悟空（Black Myth: Wukong） | 
-| **团队成员** | 邹世豪、赵佑赫、罗强、齐欣然 | 共 4 人 |
-| **开发框架** | **Unreal Engine** |
-| **项目截止** | **2025 年 12 月 28 日 晚 24 点** | 
+## 技术栈
+- 引擎：Unreal Engine 5
+- 语言：C++
+- 输入系统：Enhanced Input System
+- 动画系统：Animation Montage
 
----
+## 编译运行
+1. 安装UE5引擎
+2. 安装Visual Studio 2022
+3. 从epic games中的fab里下载ParagonSunWukong，ParagonFengmao，ParagonGideon,ParagonNarbash,ParagonRampage五个动作资源拖入content文件夹中
+4. 右键WUKONGPROJECT.uproject - 生成Visual Studio项目文件
+5. 打开.sln文件，编译WUKONGPROJECT项目
+6. 双击WUKONGPROJECT.uproject启动游戏
 
-## 悟空项目使用指南
+## 基础功能
+- 角色系统：悟空模型，基础动作（移动、跳跃、闪避、攻击）
+- 战斗系统：生命值、攻击判定、技能系统
+- 敌人系统：封魔敌人，AI行为（巡逻、追逐、攻击、闪避）
+- UI系统：血条、蓝条、背包、技能槽、暂停菜单
 
-本项目是一个基于 C++ 的虚幻引擎项目，需要所有使用者进行 **编译** 步骤后才能正常运行。
-
-### 1. 项目环境要求
-
-* **引擎版本：** 必须安装与项目创建时 **相同版本** 的 Unreal Engine（请向项目负责人确认具体版本号）。
-* **开发环境：** 必须安装 **Visual Studio**（推荐 2022 或更高版本）。
-    * 在 Visual Studio 安装器中，必须勾选 **“使用 C++ 的桌面开发”** 工作负载，以及对应的 **Windows SDK**。
-
-### 2. 代码克隆与文件结构
-
-* **下载/克隆：** 从 GitHub 仓库下载或克隆项目。
-* **文件结构：** 本仓库已使用 `.gitignore` 忽略了所有本地生成和体积庞大的文件，只包含以下必要文件：
-    * `Config/`
-    * `Content/`
-    * `Source/`
-    * `WUKONGPROJECT.uproject`
-    * `WUKONGPROJECT.sln`
-* **注意：** 请勿尝试手动上传或下载 `/Binaries/`、`/Intermediate/` 或 `/DerivedDataCache/` 文件夹。
-
-### 3. C++ 模块编译（核心步骤）
-
-**这是启动 C++ 项目的关键一步，必须在首次运行前完成。**
-
-1.  **生成项目文件：**
-    * 在项目根目录找到 `WUKONGPROJECT.uproject` 文件。
-    * **右键点击**，选择 **“Generate Visual Studio project files”**（生成 Visual Studio 项目文件）。
-2.  **打开解决方案：**
-    * 双击生成的 **`WUKONGPROJECT.sln`** 文件，用 Visual Studio 打开解决方案。
-3.  **配置编译设置：**
-    * 在 Visual Studio 顶部工具栏中，确保配置设置为 **`Development Editor`** 和 **`Win64`**。
-4.  **手动编译：**
-    * 在 **“解决方案资源管理器”** 中，右键点击 **`WUKONGPROJECT`** 项目。
-    * 选择 **“生成(B)” (Build)**。
-    * 等待编译完成，确保输出窗口显示 **“1 成功，0 失败”**。
-
-### 4. 启动与测试
-
-1.  **启动引擎：** 编译成功后，关闭 Visual Studio，双击 **`WUKONGPROJECT.uproject`** 启动虚幻编辑器。
-    * *(提示：如果引擎弹出模块缺失的警告，选择 **“是”（Yes）** 让引擎自动编译。)*
-2.  **运行项目：**
-    * 在编辑器中打开项目，点击主界面顶部的 **“播放” (Play)** 按钮。
-3.  **验证输入：**
-    * 角色应该能使用 **WASD** 键根据视角方向移动。
-    * **鼠标** 应该能自由控制角色和镜头的转向。
-    * **空格键** 应该能让角色跳跃。
+## 操作说明
+- WASD：移动
+- 鼠标：视角
+- 空格：跳跃
+- 左Shift：冲刺
+- 鼠标左键：轻攻击
+- 鼠标右键：重攻击
+- F：闪避
+- Q：定身法
+- E：喝药
+- V：隐身
+- R：变身
