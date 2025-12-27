@@ -1,9 +1,7 @@
-#include "MusicPlayerActor.h"
+ï»¿#include "MusicPlayerActor.h"
 
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "Sound/SoundBase.h"
-#include "GameFramework/Pawn.h"
 #include "WukongCharacter.h"
 
 AMusicPlayerActor::AMusicPlayerActor()
@@ -14,77 +12,30 @@ AMusicPlayerActor::AMusicPlayerActor()
     RootComponent = AudioComponent;
 
     AudioComponent->bAutoActivate = false;
-
     CurrentPlayingSound = nullptr;
-    TargetCubePawn = nullptr;
 }
 
 void AMusicPlayerActor::BeginPlay()
 {
     Super::BeginPlay();
 
-    // =============================
-    // 1. Ö»ÔÚÖ¸¶¨¹Ø¿¨ÉúĞ§£¨¿ÉÉ¾£©
-    // =============================
-
-    FString LevelName = UGameplayStatics::GetCurrentLevelName(this, true);
-    UE_LOG(LogTemp, Log, TEXT("MusicPlayerActor µ±Ç°¹Ø¿¨£º%s"), *LevelName);
-
-    if (!LevelName.Contains(TEXT("LandscapeAutoMaterial_MountainRange_Example"), ESearchCase::IgnoreCase))
+    // æ ¡éªŒéŸ³ä¹èµ„æº
+    if (!Music1 || !WangLinMusic)
     {
-        UE_LOG(LogTemp, Log, TEXT("·ÇÄ¿±ê¹Ø¿¨£¬¹Ø±Õ Tick"));
+        UE_LOG(LogTemp, Error, TEXT("MusicPlayerActorï¼šéŸ³ä¹èµ„æºæœªè®¾ç½®"));
         PrimaryActorTick.bCanEverTick = false;
         return;
     }
 
-    // =============================
-    // 2. Èô±à¼­Æ÷Î´ÍÏ TargetCubePawn£¬Ôò×Ô¶¯²éÕÒ
-    // =============================
-    if (!TargetCubePawn)
-    {
-        TArray<AActor*> Pawns;
-        UGameplayStatics::GetAllActorsOfClass(GetWorld(), ACharacter::StaticClass(), Pawns);
-
-        for (AActor* Actor : Pawns)
-        {
-            if (Actor && Actor->GetName().Contains(TEXT("ParagonFengMao")))
-            {
-                TargetCubePawn = Cast<ACharacter>(Actor);
-                UE_LOG(LogTemp, Log, TEXT("×Ô¶¯ÕÒµ½Ä¿±ê·½¿é Pawn£º%s"), *Actor->GetName());
-                break;
-            }
-        }
-    }
-
-    if (!TargetCubePawn)
-    {
-        UE_LOG(LogTemp, Error, TEXT("Î´ÕÒµ½Ä¿±ê·½¿é Pawn£¬ÒôÀÖ¾àÀë¼ì²â½«Ê§Ğ§"));
-        PrimaryActorTick.bCanEverTick = false;
-        return;
-    }
-
-    // =============================
-    // 3. Ğ£ÑéÒôÀÖ×ÊÔ´
-    // =============================
-    if (!WangLinMusic || !Music1)
-    {
-        UE_LOG(LogTemp, Error, TEXT("ÒôÀÖ×ÊÔ´Î´ÉèÖÃ£¨WangLinMusic / Music1£©"));
-        PrimaryActorTick.bCanEverTick = false;
-        return;
-    }
-
-    // =============================
-    // 4. °ó¶¨²¥·ÅÍê³É»Øµ÷£¨Î±Ñ­»·£©
-    // =============================
+    // æ’­æ”¾å®Œæˆå›è°ƒï¼ˆå¾ªç¯ï¼‰
     AudioComponent->OnAudioFinished.AddDynamic(
-        this, &AMusicPlayerActor::OnMusicFinishedPlaying);
+        this, &AMusicPlayerActor::OnMusicFinishedPlaying
+    );
 
-    // =============================
-    // 5. ¿ª¾ÖÁ¢¼´¼ì²âÒ»´Î
-    // =============================
+    // å¼€å±€ç«‹å³æ ¹æ® num å†³å®šéŸ³ä¹
     if (bAutoPlayOnBegin)
     {
-        CheckDistanceAndSwitchMusic();
+        CheckAndSwitchMusicByNum();
     }
 }
 
@@ -92,12 +43,12 @@ void AMusicPlayerActor::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    CheckDistanceAndSwitchMusic();
+    CheckAndSwitchMusicByNum();
 }
 
-void AMusicPlayerActor::CheckDistanceAndSwitchMusic()
+void AMusicPlayerActor::CheckAndSwitchMusicByNum()
 {
-    if (!AudioComponent || !TargetCubePawn)
+    if (!AudioComponent)
     {
         return;
     }
@@ -109,23 +60,30 @@ void AMusicPlayerActor::CheckDistanceAndSwitchMusic()
     }
 
     // =============================
-    // ¾àÀë¼ÆËã£¨ÕıÈ·ÓÃ·¨£©
+    // â­ æ ¸å¿ƒï¼šæ ¹æ® num åˆ¤æ–­éŸ³ä¹
     // =============================
-    float Distance = FVector::Distance(
-        Wukong->GetActorLocation(),
-        TargetCubePawn->GetActorLocation()
-    );
+    USoundBase* TargetSound = nullptr;
 
-    // =============================
-    // ¸ù¾İ¾àÀë¾ö¶¨ÒôÀÖ
-    // =============================
-    USoundBase* TargetSound =
-        (Distance <= DistanceThreshold) ? WangLinMusic : Music1;
+    if (Wukong->num == 0)
+    {
+        TargetSound = Music1;
+    }
+    else
+    {
+        TargetSound = WangLinMusic;
+    }
 
+    // éŸ³ä¹å‘ç”Ÿå˜åŒ–æ‰åˆ‡æ¢
     if (TargetSound && TargetSound != CurrentPlayingSound)
     {
         PlayMusic(TargetSound);
         CurrentPlayingSound = TargetSound;
+
+        UE_LOG(LogTemp, Log,
+            TEXT("åˆ‡æ¢éŸ³ä¹ï¼šnum=%llu â†’ %s"),
+            Wukong->num,
+            *TargetSound->GetName()
+        );
     }
 }
 
@@ -144,8 +102,6 @@ void AMusicPlayerActor::PlayMusic(USoundBase* TargetSound)
     AudioComponent->SetSound(TargetSound);
     AudioComponent->SetVolumeMultiplier(1.0f);
     AudioComponent->Play();
-
-    UE_LOG(LogTemp, Log, TEXT("¿ªÊ¼²¥·ÅÒôÀÖ£º%s"), *TargetSound->GetName());
 }
 
 void AMusicPlayerActor::StopMusic()
@@ -159,7 +115,7 @@ void AMusicPlayerActor::StopMusic()
 
 void AMusicPlayerActor::OnMusicFinishedPlaying()
 {
-    // ¼òµ¥Ñ­»·²¥·Åµ±Ç°ÒôÀÖ
+    // å¾ªç¯æ’­æ”¾å½“å‰éŸ³ä¹
     if (CurrentPlayingSound)
     {
         PlayMusic(CurrentPlayingSound);
@@ -169,5 +125,6 @@ void AMusicPlayerActor::OnMusicFinishedPlaying()
 AWukongCharacter* AMusicPlayerActor::GetPlayerWukong()
 {
     return Cast<AWukongCharacter>(
-        UGameplayStatics::GetPlayerCharacter(this, 0));
+        UGameplayStatics::GetPlayerCharacter(this, 0)
+    );
 }

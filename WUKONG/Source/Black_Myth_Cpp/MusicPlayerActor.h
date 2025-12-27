@@ -7,7 +7,6 @@
 
 class UAudioComponent;
 class AWukongCharacter;
-class APawn;
 
 UCLASS(Blueprintable)
 class BLACK_MYTH_CPP_API AMusicPlayerActor : public AActor
@@ -26,22 +25,16 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Audio")
     UAudioComponent* AudioComponent;
 
+    // 受伤后播放
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")
     USoundBase* WangLinMusic;
 
+    // 正常状态播放
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")
     USoundBase* Music1;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings")
     bool bAutoPlayOnBegin = true;
-
-    // ================= Distance =================
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Distance")
-    float DistanceThreshold = 500.0f;
-
-    // ⭐ 关键：用 APawn，而不是 AMyPawn
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Distance")
-    ACharacter* TargetCubePawn = nullptr;
 
     // ================= Control =================
     UFUNCTION(BlueprintCallable, Category = "Audio")
@@ -59,6 +52,6 @@ private:
 
     AWukongCharacter* GetPlayerWukong();
 
-    // ✅ 不再传 FVector
-    void CheckDistanceAndSwitchMusic();
+    // ⭐ 根据 num 判断并切歌
+    void CheckAndSwitchMusicByNum();
 };
