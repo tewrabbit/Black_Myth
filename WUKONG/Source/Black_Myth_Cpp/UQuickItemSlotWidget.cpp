@@ -114,15 +114,16 @@ void UQuickItemSlotWidget::StartCooldown(float Duration)
     if (CooldownText)    CooldownText->SetVisibility(ESlateVisibility::HitTestInvisible);
 }
 
-void UQuickItemSlotWidget::Use()
+bool UQuickItemSlotWidget::Use()
 {
-    if (!bHasItem) return;
-    if (bIsCoolingDown) return;
-    if (CurrentQty <= 0) return;
+    if (!bHasItem) return false;
+    if (bIsCoolingDown) return false;
+    if (CurrentQty <= 0) return false;
 
     // 让外部去“扣背包数量/触发效果”
     OnUseRequested.ExecuteIfBound();
 
     // 自己进入冷却（外部扣完数量后会刷新 UI）
     StartCooldown(CurrentCooldown);
+    return true;
 }

@@ -32,7 +32,6 @@ TSharedRef<SWidget> UInventoryWidget::RebuildWidget()
     UOverlay* RootOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
     WidgetTree->RootWidget = RootOverlay;
 
-    // 背景（可选）
     {
         UImage* BG = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
         BG->SetColorAndOpacity(FLinearColor(0.f, 0.f, 0.f, 0.5f));
@@ -49,19 +48,16 @@ TSharedRef<SWidget> UInventoryWidget::RebuildWidget()
         S->SetPadding(FMargin(10.f));
     }
 
-    // Left category box
     CategoryBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
     MainLayout->AddChildToHorizontalBox(CategoryBox);
 
     CreateCategoryButton(TEXT("Medicine"), EItemCategory::Medicine);
     CreateCategoryButton(TEXT("Others"), EItemCategory::Other);
 
-    // spacer
     USpacer* Spacer = WidgetTree->ConstructWidget<USpacer>(USpacer::StaticClass());
     Spacer->SetSize(FVector2D(20.f, 0.f));
     MainLayout->AddChildToHorizontalBox(Spacer);
 
-    // Right wrapbox
     ItemGridBox = WidgetTree->ConstructWidget<UWrapBox>(UWrapBox::StaticClass());
     ItemGridBox->SetInnerSlotPadding(FVector2D(24.f, 24.f));
     MainLayout->AddChildToHorizontalBox(ItemGridBox);
@@ -100,7 +96,7 @@ FItemStack UInventoryWidget::MakeItemTemplate(EItemType Type, const FString& Nam
     case EItemType::HealthPotion:
         T.Category = EItemCategory::Medicine;
         T.CooldownSeconds = 3.f;
-        // ⚠️改成你自己的路径（Copy Reference）
+        
         T.Icon = LoadTexHard(TEXT("/Game/UI/maxblood"));
         break;
 
@@ -184,7 +180,7 @@ void UInventoryWidget::HandleItemClicked(const FString& Key)
     // 刷新当前分类页的选中高亮
     RefreshItemList(CurrentCategory);
 
-    // 选中的是不是消耗品？是则显示到快捷槽
+    // 选中的是不是消耗品
     if (QuickSlot)
     {
         const FItemStack* Item = FindItemByKey(Key);
@@ -249,8 +245,6 @@ void UInventoryWidget::ConsumeSelectedOne()
     if (!Item->IsConsumable()) return;
     if (Item->Quantity <= 0) return;
 
-    // TODO：这里就是“使用效果”的接口（加血/加蓝）
-    // 你可以改成调用角色/组件：ApplyPotion(Item->Type) 等
 
     Item->Quantity -= 1;
     if (Item->Quantity < 0) Item->Quantity = 0;
@@ -271,10 +265,11 @@ void UInventoryWidget::ConsumeSelectedOne()
     }
 }
 
-void UInventoryWidget::UseSelectedQuickItem()
+bool UInventoryWidget::UseSelectedQuickItem()
 {
-    if (!QuickSlot) return;
-    QuickSlot->Use();
+    if (!QuickSlot) return false;
+    
+    return QuickSlot->Use();
 }
 
 void UInventoryWidget::OnMedicineClicked()
@@ -287,4 +282,14 @@ void UInventoryWidget::OnOtherClicked()
 {
     CurrentCategory = EItemCategory::Other;
     RefreshItemList(CurrentCategory);
+}
+EItemType UInventoryWidget::GetSelectedItemType() const
+{
+    if (SelectedKey.IsEmpty())
+    {
+        return EItemType::Other;
+    }
+
+    const FItemStack* Item = FindItemByKey(SelectedKey);
+    return Item ? Item->Type : EItemType::Other;
 }

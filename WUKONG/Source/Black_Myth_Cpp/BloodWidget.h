@@ -16,14 +16,14 @@ class BLACK_MYTH_CPP_API UBloodWidget : public UUserWidget
 
 public:
 
-    // 用于构建 UI 结构的函数（替代蓝图编辑器里的拖拽操作）
+    // 用于构建 UI 结构的函数
     virtual TSharedRef<SWidget> RebuildWidget() override;
 
     // 更新血量的接口
     void UpdateHealth(float Current, float Max);
 
 protected:
-    // 不需要 BindWidget，因为是我们自己创建的
+
     UPROPERTY()
     UProgressBar* HealthProgressBar;
 

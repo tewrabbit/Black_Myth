@@ -13,6 +13,7 @@
 // 包含小怪头文件
 #include "ParagonNarbash.h"
 #include "ParagonRampage.h"
+#include "BoWidget.h"
 
 AParagonGideon::AParagonGideon()
 {
@@ -233,6 +234,26 @@ void AParagonGideon::BeginPlay()
 
     // 添加调试信息，确认我们的C++类被正确调用
     UE_LOG(LogTemp, Warning, TEXT("👹 Gideon C++类已正确初始化，类名: %s"), *this->GetClass()->GetName());
+
+    if (UWorld* World = GetWorld())
+    {
+        UBoWidget* BoosHealthBarWidget = CreateWidget<UBoWidget>(World, UBoWidget::StaticClass());
+
+        if (BoosHealthBarWidget)
+        {
+            // 2. 添加到视口 (ZOrder 设大一点防止被其他 UI 遮挡)
+            BoosHealthBarWidget->AddToViewport(9999);
+
+            // 3. 传递引用
+            BoosHealthBarWidget->SetBossReference(this);
+
+            UE_LOG(LogTemp, Warning, TEXT("UI Created Successfully using StaticClass!"));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to Create Widget!"));
+        }
+    }
 }
 void AParagonGideon::Tick(float DeltaTime)
 {
@@ -243,6 +264,9 @@ void AParagonGideon::Tick(float DeltaTime)
 
     // 定期检查阶段转换
     CheckPhaseTransition();
+
+    FVector CurrentLocation = GetActorLocation();
+    UE_LOG(LogTemp, Warning, TEXT("Boss position: %s"), *CurrentLocation.ToString());
 }
 
 void AParagonGideon::CheckPhaseTransition()
@@ -1100,4 +1124,9 @@ void AParagonGideon::Die()
         GetWorldTimerManager().ClearTimer(ShieldTimerHandle);
         GetWorldTimerManager().ClearTimer(EnrageTimerHandle);
     }
+}
+
+FVector AParagonGideon::GetBossLocation() const
+{
+    return GetActorLocation(); // 返回 Boss 的位置
 }

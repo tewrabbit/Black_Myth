@@ -26,7 +26,6 @@ TSharedRef<SWidget> UBloodWidget::RebuildWidget()
 
         if (BarSlot)
         {
-            // --- 布局设置 (对应编辑器右侧的 Slot 属性) ---
 
             // 锚点 (Anchors): 左上角 (0,0)
             BarSlot->SetAnchors(FAnchors(0.0f, 0.0f));
@@ -38,16 +37,12 @@ TSharedRef<SWidget> UBloodWidget::RebuildWidget()
             BarSlot->SetSize(FVector2D(300.0f, 30.0f));
         }
 
-        // --- 样式设置 (淡红背景，白色填充) ---
         FProgressBarStyle Style = HealthProgressBar->GetWidgetStyle();
 
-        // 背景: 淡红色
         Style.BackgroundImage.TintColor = FSlateColor(FLinearColor(1.0f, 0.3f, 0.3f, 1.0f));
-        // 填充: 白色
         Style.FillImage.TintColor = FSlateColor(FLinearColor::White);
 
         HealthProgressBar->SetWidgetStyle(Style);
-        HealthProgressBar->SetPercent(0.75f); // 初始给个 75% 看看效果
     }
 
     // 4. 返回底层的 Slate Widget

@@ -40,6 +40,9 @@ public:
     // 构造函数
     AParagonGideon();
 
+    UFUNCTION(BlueprintCallable, Category = "Boss")
+    FVector GetBossLocation() const;
+
 protected:
     // 生命周期函数
     virtual void BeginPlay() override;

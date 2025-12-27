@@ -29,7 +29,7 @@ struct FItemStack
     FString Name;
     int32 Quantity = 0;
 
-    // 图标（纯 C++ 直接存指针）
+    // 图标
     TObjectPtr<class UTexture2D> Icon = nullptr;
 
     // 消耗品冷却（非消耗品可为 0）

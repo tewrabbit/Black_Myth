@@ -36,9 +36,9 @@ public:
 
 	// SlotIndex: 0 or 1
 	UFUNCTION(BlueprintCallable)
-	void StartCooldown(int32 SlotIndex, float Duration);
+	bool StartCooldown(int32 SlotIndex, float Duration);
 
-	// 纯 C++ 也可以外部换图（可选）
+
 	UFUNCTION(BlueprintCallable)
 	void SetSkillIconTexture(int32 SlotIndex, UTexture2D* Texture);
 

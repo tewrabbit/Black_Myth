@@ -24,7 +24,7 @@ public:
     void SetQuickItem(const FItemStack* ItemOrNull);
 
     // 外部：请求使用（由外部绑定真正的“扣数量”逻辑）
-    void Use();
+    bool Use();
 
     // 让外部绑定：当 Use() 被调用时，外部去扣背包数量
     FOnQuickUseRequested OnUseRequested;
