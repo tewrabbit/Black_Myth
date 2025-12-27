@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
@@ -10,6 +10,7 @@
 #include "MyPlayerWidget.h"
 #include "ParagonFengMao.h"  // 🆕 添加敌人头文件
 #include "InputAction.h"//加的
+#include "ItemTypes.h"
 #include "WukongCharacter.generated.h"
 
 
@@ -93,6 +94,34 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Combat|Detection")
     void TestDetectionSystem();
+
+    void setCurrentHealth(float Health)
+    {
+        CurrentHealth = Health;
+        if (MyPlayerHUD)
+        {
+            // 计算百分比 (当前 / 最大)
+            float Percent = CurrentHealth / MaxHealth;
+
+            // 通知 UI 更新
+            MyPlayerHUD->UpdateHealth(CurrentHealth, MaxHealth);
+        }
+    }
+
+    void setbIsDead(bool Isdead)
+    {
+        bIsDead = Isdead;
+    }
+
+    UMyPlayerWidget* getMyPlayerHUD() { return MyPlayerHUD; }
+
+    bool bIsStiff;//僵直变量
+
+    bool Stiff()//僵直的返回函数
+    {
+        return bIsStiff;
+    }
+    unsigned long long num = 0;
 
 protected:
     // ==========================================
@@ -202,8 +231,26 @@ protected:
     UPROPERTY(EditAnywhere, Category = "UI")
     TSubclassOf<class UMyPlayerWidget> PlayerWidgetClass;
 
+    UFUNCTION(BlueprintCallable)
+    void increaseHealth(float increaseAmount);
+
+    UFUNCTION(BlueprintCallable)
+    void increaseMana(float ManaAmount);
+
+    UFUNCTION(BlueprintCallable)
+    void useItem();
+
+    EItemType GetSelectedItemType();
     UPROPERTY()
     class UMyPlayerWidget* MyPlayerHUD;    // 1. 保存 UI 的实例指针
+
+    // 这里我们直接用 TSubclassOf 指定纯 C++ 类，或者留空在蓝图中选
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<class UResurrectionMenuWidget> ResurrectionWidgetClass;
+
+    // 保存实例引用，防止重复创建
+    UPROPERTY()
+    UResurrectionMenuWidget* ResurrectionMenuInstance;
 
 
     UPROPERTY()
@@ -258,7 +305,12 @@ protected:
     void ShowDamageNumbers(FVector Location, float Damage, bool bIsCritical = false);
     void DrawDebugDetectionShape(EAttackDetectionType DetectionType, FVector Center, FVector Extents, FRotator Rotation, FColor Color, float Duration);
 
+    // 僵直时间
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat")
+    float StiffDuration = 0.5f;
 
+    FTimerHandle StiffTimer;
+    void EndStiff();
 
 private:
 
@@ -296,7 +348,7 @@ private:
     void TestRespawn();      // 🔄 测试重生
     void TestFrontDetection(); // 👁️ 测试前方是否有目标
     void ReceiveDamage(float DamageAmount);
-    void useskillslot();
+    bool useskillslot(float duringtime,int choice);
     void UseSkill(float ManaCost);
     void OnTogglePauseMenu();
     void OnToggleInventory();
@@ -447,6 +499,9 @@ private:
     UPROPERTY(EditDefaultsOnly, Category = "Combat|Detection")
     float CriticalHitMultiplier = 1.5f;
 
+    UPROPERTY(EditDefaultsOnly, Category = "jiangzhi")
+    UAnimMontage* jiangzhi;  // 僵直动画
+
     // 🆕 检测到的敌人列表
     TArray<AActor*> LastDetectedEnemies;
 
@@ -464,4 +519,5 @@ private:
     TArray<FVector> DamageNumberLocations;
     TArray<float> DamageNumberValues;
     TArray<bool> DamageNumberIsCritical;
+
 };
