@@ -141,13 +141,13 @@ void UMyPlayerWidget::UpdateMana(float CurrentMana, float MaxMana)
     }
 }
 
-void UMyPlayerWidget::TriggerSkillCooldown(float Duration)
+bool UMyPlayerWidget::TriggerSkillCooldown(float Duration,int choice)
 {
     if (SkillSlot)
     {
-        SkillSlot->StartCooldown(1, Duration);
-
+       return SkillSlot->StartCooldown(choice, Duration);
     }
+    return false;
 }
 
 void UMyPlayerWidget::UseQuickItem()

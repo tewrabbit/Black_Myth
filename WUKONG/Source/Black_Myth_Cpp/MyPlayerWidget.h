@@ -24,7 +24,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "UI")
     void UpdateMana(float CurrentMana, float MaxMana);
 
-    void TriggerSkillCooldown(float Duration);
+   bool TriggerSkillCooldown(float Duration,int choice);
 
     USkillSlotWidget* getSillSlot() { return SkillSlot; }
 
@@ -35,7 +35,7 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "UI")
     void ToggleInventory();
-
+    UInventoryWidget* getInventory() { return InventoryWidget; }
 protected:
     // 蓝条组件 (不需要 BindWidget，因为是手动创建)
     UPROPERTY()

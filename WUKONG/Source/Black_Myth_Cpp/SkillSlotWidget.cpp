@@ -57,10 +57,7 @@ static UOverlay* BuildOneSlot(UWidgetTree* WidgetTree, FSkillSlotRuntime& OutSlo
 USkillSlotWidget::USkillSlotWidget(const FObjectInitializer& ObjectInitializer)
 	: UUserWidget(ObjectInitializer)
 {
-	// ⚠️把下面两条路径改成你自己贴图的 Copy Reference
-	// 右键贴图 -> Copy Reference
-	// 形如：Texture2D'/Game/UI/Icons/T_SkillFire.T_SkillFire'
-	// 你要用的是中间这段：/Game/UI/Icons/T_SkillFire.T_SkillFire
+
 
 	{
 		static ConstructorHelpers::FObjectFinder<UTexture2D> T0(
@@ -154,18 +151,28 @@ void USkillSlotWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 	}
 }
 
-void USkillSlotWidget::StartCooldown(int32 SlotIndex, float Duration)
+bool USkillSlotWidget::StartCooldown(int32 SlotIndex, float Duration)
 {
-	if (SlotIndex < 0 || SlotIndex >= 2) return;
-	if (Duration <= 0.f) return;
+	if (SlotIndex < 0 || SlotIndex >= 2) 
+		return false;
+	if (Duration <= 0.f) 
+		return false;
 
 	FSkillSlotRuntime& S = Slots[SlotIndex];
+
+	if (S.bIsCoolingDown)
+	{
+		// 返回 false，表示技能仍在冷却中
+		return false;
+	}
+
 	S.bIsCoolingDown = true;
 	S.CooldownTimer = Duration;
 	S.CooldownDuration = Duration;
 
 	if (S.CooldownOverlay) S.CooldownOverlay->SetVisibility(ESlateVisibility::Visible);
 	if (S.CooldownText)    S.CooldownText->SetVisibility(ESlateVisibility::HitTestInvisible);
+	return true;
 }
 
 void USkillSlotWidget::SetSkillIconTexture(int32 SlotIndex, UTexture2D* Texture)

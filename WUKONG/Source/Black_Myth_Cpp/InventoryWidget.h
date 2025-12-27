@@ -18,22 +18,21 @@ public:
     virtual TSharedRef<SWidget> RebuildWidget() override;
     virtual void NativeConstruct() override;
 
-    // ✅ 你要的接口：添加物品（自动分区、堆叠）
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     void AddItem(EItemType Type, const FString& Name, int32 Amount);
 
-    // 外部把右下角快捷槽注入进来（HUD 创建后调用一次）
+    // 外部把右下角快捷槽注入进来
     void SetQuickSlot(UQuickItemSlotWidget* InQuickSlot);
 
-    // 外部调用：使用当前选中的快捷物品（例如按键触发）
-    void UseSelectedQuickItem();
+    // 外部调用：使用当前选中的快捷物品
+    bool UseSelectedQuickItem();
 
     UFUNCTION()
     void OnMedicineClicked();
 
     UFUNCTION()
     void OnOtherClicked();
-
+    EItemType GetSelectedItemType() const;
 
 
 protected:
@@ -59,11 +58,11 @@ private:
     const FItemStack* FindItemByKey(const FString& Key) const;
     FItemStack* FindItemByKeyMutable(const FString& Key);
 
-    // 根据类型决定：分类/图标/冷却（你可以在这里扩展更多物品）
+    // 根据类型决定：分类/图标/冷却
     FItemStack MakeItemTemplate(EItemType Type, const FString& Name) const;
 
     // 快捷槽请求使用时：真正扣数量 + 刷新 UI
-    void ConsumeSelectedOne();
+   void ConsumeSelectedOne();
 
     FVector2D ItemCellSize = FVector2D(128.f, 128.f);
 

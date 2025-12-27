@@ -34,7 +34,6 @@ TSharedRef<SWidget> UInventoryItemWidget::RebuildWidget()
         IconImage->SetColorAndOpacity(FLinearColor::White);
     }
 
-    // Selected overlay
     SelectedOverlay = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("SelectedOverlay"));
     {
         auto* S = Root->AddChildToOverlay(SelectedOverlay);
@@ -44,7 +43,6 @@ TSharedRef<SWidget> UInventoryItemWidget::RebuildWidget()
         SelectedOverlay->SetVisibility(ESlateVisibility::Hidden);
     }
 
-    // Qty text bottom-left
     QtyText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ItemQty"));
     {
         auto* S = Root->AddChildToOverlay(QtyText);
@@ -53,7 +51,6 @@ TSharedRef<SWidget> UInventoryItemWidget::RebuildWidget()
         S->SetPadding(FMargin(6.f));
     }
 
-    // Bind click
     if (ClickButton)
     {
         ClickButton->OnClicked.AddDynamic(this, &UInventoryItemWidget::HandleClicked);
