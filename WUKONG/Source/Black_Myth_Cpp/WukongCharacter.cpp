@@ -31,6 +31,7 @@
 #include "MyCameraModifier.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
+#include "ResurrectionMenuWidget.h"
 /*
 ===============================================================================
     🏮 悟空角色系统 - 实现文件
@@ -205,6 +206,14 @@ AWukongCharacter::AWukongCharacter() {
     );
     if (Attack4Obj.Succeeded()) {
         Attack4Montage = Attack4Obj.Object;
+    }
+
+    static ConstructorHelpers::FObjectFinder<UAnimMontage> jiangzhiObj(
+        TEXT("/Game/ParagonSunWukong/Characters/Heroes/Wukong/Animations/Bound_Montage.Bound_Montage")
+    );
+    if (jiangzhiObj.Succeeded()) {
+        jiangzhi = jiangzhiObj.Object;
+        UE_LOG(LogTemp, Warning, TEXT("✅ jiangzhi Loaded: %s"), *GetNameSafe(jiangzhi));
     }
 
     // 💥 加载重攻击动画
@@ -625,7 +634,10 @@ void AWukongCharacter::PlayLightAttackMontage(int32 ComboIndex)
 {
     UE_LOG(LogTemp, Warning, TEXT("🎬 ===== PLAY ATTACK MONTAGE ====="));
     UE_LOG(LogTemp, Warning, TEXT("📊 参数: ComboIndex=%d"), ComboIndex);
-
+    if (Stiff()&& num <=3 )
+    {
+         return;
+    }
     UAnimMontage* SelectedMontage = nullptr;
     int32 AttackCount = ComboIndex + 1;
 
@@ -666,7 +678,10 @@ void AWukongCharacter::PlayLightAttackMontage(int32 ComboIndex)
 void AWukongCharacter::Move(const FInputActionValue& Value) {
     FVector2D MovementVector = Value.Get<FVector2D>();
     LastMovementInput = MovementVector;
-
+    if (Stiff() && num <= 3)
+    {
+         return;
+    }
     if (Controller) {
         const FRotator Rotation = Controller->GetControlRotation();
         const FRotator YawRotation(0, Rotation.Yaw, 0);
@@ -679,7 +694,10 @@ void AWukongCharacter::Move(const FInputActionValue& Value) {
 
 void AWukongCharacter::Look(const FInputActionValue& Value) {
     FVector2D LookAxisVector = Value.Get<FVector2D>();
-
+    if (Stiff() && num <= 3)
+    {
+        return;
+    }
     if (Controller) {
         AddControllerYawInput(LookAxisVector.X);
         FRotator CurrentRotation = Controller->GetControlRotation();
@@ -697,17 +715,30 @@ void AWukongCharacter::Look(const FInputActionValue& Value) {
 
 void AWukongCharacter::SprintStart() {
     UE_LOG(LogTemp, Warning, TEXT("SprintStart Triggered"));
+   if (Stiff() && num <= 3)
+   {
+        return;
+   }
     CurrentActionState = EWukongActionState::Sprint;
     GetCharacterMovement()->MaxWalkSpeed = 1000.0f;
 }
 
 void AWukongCharacter::SprintStop() {
     UE_LOG(LogTemp, Warning, TEXT("SprintStop Triggered"));
+    if (Stiff() && num <= 3)
+    {
+       return;
+    }
     CurrentActionState = EWukongActionState::Idle;
     GetCharacterMovement()->MaxWalkSpeed = 500.0f;
 }
 
 void AWukongCharacter::Dodge() {
+    if (Stiff() && num <= 3)
+    {
+       return;
+    }
+    
     if (CurrentActionState == EWukongActionState::Dodge || !bCanDodge) {
         UE_LOG(LogTemp, Warning, TEXT("Dodge blocked: already dodging or cooling down"));
         return;
@@ -813,24 +844,77 @@ void AWukongCharacter::Dodge() {
 
 float AWukongCharacter::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser)
 {
-    if (bIsDead)
+  
     {
-        return 0.f;
+        if (bIsDead)
+        {
+            return 0.f;
+        }
+
+        // 扣血
+        CurrentHealth = FMath::Max(CurrentHealth - DamageAmount, 0.f);
+        num++;
+        if (MyPlayerHUD)
+        {
+            float Percent = CurrentHealth / MaxHealth;
+            MyPlayerHUD->UpdateHealth(CurrentHealth, MaxHealth);
+        }
+        /* ================== 🎥 受伤镜头抖动 ================== */
+        APlayerController* PC = Cast<APlayerController>(GetController());
+        if (PC && PC->PlayerCameraManager)
+        {
+            UMyCameraModifier* Modifier =
+                Cast<UMyCameraModifier>(
+                    PC->PlayerCameraManager->AddNewCameraModifier(
+                        UMyCameraModifier::StaticClass()
+                    )
+                );
+
+            if (Modifier)
+            {
+                // 受伤抖动：0.25 秒，强度 2.0（你可以微调）
+                Modifier->StartShake(0.25f, 2.0f);
+            }
+        }
+        /* ==================================================== */
+
+        // 播放僵直动画
+        UAnimInstance* Anim = GetMesh()->GetAnimInstance();
+        if (Anim && jiangzhi)
+        {
+            Anim->StopAllMontages(0.05f);
+            Anim->Montage_Play(jiangzhi, 0.01f);
+        }
+
+        // 进入僵直
+        bIsStiff = true;
+        if(num<=3)        
+        { 
+            GetCharacterMovement()->DisableMovement();// 禁止移动
+                // 0.5 秒后复原
+            GetWorldTimerManager().SetTimer(
+                StiffTimer,
+                this,
+                &AWukongCharacter::EndStiff,
+                StiffDuration,
+                false
+            );
+        }
+        if (CurrentHealth <= 0.f)
+        {
+            Die();
+        }
+
+        return DamageAmount;
     }
+}
 
-    float ActualDamage = DamageAmount;
-    ReceiveDamage(ActualDamage);
-    CurrentHealth = FMath::Max(CurrentHealth, 0.f);
+void AWukongCharacter::EndStiff()
+{
+    bIsStiff = false;
 
-    UE_LOG(LogTemp, Warning, TEXT("💥 受到伤害: %.1f, 剩余生命值: %.1f/%.1f"),
-        ActualDamage, CurrentHealth, MaxHealth);
-
-    if (CurrentHealth <= 0.f && !bIsDead)
-    {
-        Die();
-    }
-
-    return ActualDamage;
+    // 恢复移动
+    GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 }
 
 void AWukongCharacter::Die()
@@ -841,25 +925,35 @@ void AWukongCharacter::Die()
     }
 
     bIsDead = true;
-    CurrentActionState = EWukongActionState::Idle;
 
-    UE_LOG(LogTemp, Warning, TEXT("💀 角色死亡！生命值: %.1f"), CurrentHealth);
-
-    if (GetMesh() && GetMesh()->GetAnimInstance())
+    // 2. 获取玩家控制器
+    if (APlayerController* PC = Cast<APlayerController>(GetController()))
     {
-        GetMesh()->GetAnimInstance()->StopAllMontages(0.1f);
+        // 3. 创建 UI (如果还没有创建过)
+        if (ResurrectionWidgetClass)
+        {
+            // 即使 Instance 存在，也最好重新创建或者确保它不在视口中
+            if (!ResurrectionMenuInstance)
+            {
+                ResurrectionMenuInstance = CreateWidget<UResurrectionMenuWidget>(PC, ResurrectionWidgetClass);
+            }
+
+            // 4. 显示 UI 并设置输入模式
+            if (ResurrectionMenuInstance && !ResurrectionMenuInstance->IsInViewport())
+            {
+                ResurrectionMenuInstance->AddToViewport();
+
+                // --- 关键：把控制权交给鼠标和UI ---
+                PC->bShowMouseCursor = true; // 显示鼠标
+
+                FInputModeUIOnly InputMode;
+                InputMode.SetWidgetToFocus(ResurrectionMenuInstance->TakeWidget());
+                InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+
+                PC->SetInputMode(InputMode);
+            }
+        }
     }
-
-    GetCharacterMovement()->DisableMovement();
-
-    GetWorldTimerManager().SetTimer(
-        DodgeTimerHandle,
-        [this]() {
-            Respawn();
-        },
-        3.f,
-        false
-    );
 }
 
 void AWukongCharacter::Respawn()
@@ -1110,7 +1204,7 @@ void AWukongCharacter::ExecuteHeavyAttack(float DamageMultiplier) {
 
     //CurrentStamina -= HeavyAttackStaminaCost;
     UseSkill(HeavyAttackStaminaCost);
-    useskillslot();
+    useskillslot(5.0,0);
     // 检查冷却和体力
   
     if (GetMesh() && GetMesh()->GetAnimInstance()) {
@@ -1470,7 +1564,7 @@ void AWukongCharacter::BeginPlay()
             Inv->AddItem(EItemType::ManaPotion, TEXT("Mana Potion"), 3);
         }
     }
-
+    ResurrectionWidgetClass = UResurrectionMenuWidget::StaticClass();
     SaveOriginalMaterials();
 
     if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -1698,6 +1792,7 @@ void AWukongCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
     Super::SetupPlayerInputComponent(PlayerInputComponent);
     InputComponent->BindKey(EKeys::P, IE_Pressed, this, &AWukongCharacter::OnTogglePauseMenu);
     PlayerInputComponent->BindKey(EKeys::I, IE_Pressed, this, &AWukongCharacter::OnToggleInventory);
+    PlayerInputComponent->BindKey(EKeys::L, IE_Pressed, this, &AWukongCharacter::useItem);
     if (!MoveAction) {
         MoveAction = NewObject<UInputAction>(this, TEXT("IA_Move"));
         MoveAction->ValueType = EInputActionValueType::Axis2D;
@@ -1761,6 +1856,8 @@ void AWukongCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
     {
         UE_LOG(LogTemp, Warning, TEXT("✅ CameraShakeAction 已存在"));
     }//新加的
+
+
     if (APlayerController* PC = Cast<APlayerController>(GetController())) {
         if (ULocalPlayer* LP = PC->GetLocalPlayer()) {
             if (auto* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LP)) {
@@ -1846,7 +1943,7 @@ void AWukongCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
         if (ToggleInvisibilityAction) {
             EnhancedInputComponent->BindAction(ToggleInvisibilityAction, ETriggerEvent::Started, this, &AWukongCharacter::ToggleInvisibility);
         }
-
+      
         // 🌀 变身按键绑定
         if (TransformAction) {
             EnhancedInputComponent->BindAction(TransformAction, ETriggerEvent::Started, this, &AWukongCharacter::TriggerTransform);
@@ -1953,9 +2050,9 @@ void AWukongCharacter::UseSkill(float ManaCost)
     }
 }
 
-void  AWukongCharacter::useskillslot()
+bool AWukongCharacter::useskillslot(float duringtime,int choice)
 {
-    MyPlayerHUD->TriggerSkillCooldown(3.0);
+    return MyPlayerHUD->TriggerSkillCooldown(duringtime,choice);
 }
 
 // ==========================================
@@ -1973,7 +2070,7 @@ void AWukongCharacter::ToggleInvisibility()
 
     bIsInvisible = !bIsInvisible;
     SetInvisibility(bIsInvisible);
-
+    useskillslot(2.0, 1);
     bCanToggleInvisibility = false;
     GetWorldTimerManager().SetTimer(
         InvisibilityCooldownTimerHandle,
@@ -3182,8 +3279,73 @@ void AWukongCharacter::OnPressJ_ShakeCamera()
         Modifier->StartShake(0.25f, 2.0f);
     }
 }
-
 void AWukongCharacter::OnToggleInventory()
 {
     if (MyPlayerHUD) MyPlayerHUD->ToggleInventory();
+}
+
+void AWukongCharacter::increaseHealth(float healthAmount)
+{
+    // 扣血逻辑
+    if (MyPlayerHUD->getInventory()->UseSelectedQuickItem())
+    {
+        CurrentHealth += healthAmount;
+    }
+    // 限制血量不小于0
+    if (CurrentHealth <= 0.0f)
+    {
+        CurrentHealth = 0.0f;
+        Die();
+    }
+    // --- 核心关联逻辑 ---
+    if (MyPlayerHUD)
+    {
+        // 计算百分比 (当前 / 最大)
+        float Percent = CurrentHealth / MaxHealth;
+
+        // 通知 UI 更新
+        MyPlayerHUD->UpdateHealth(CurrentHealth, MaxHealth);
+    }
+}
+void AWukongCharacter::increaseMana(float ManaAmount)
+{
+    // 扣蓝逻辑
+    if (MyPlayerHUD->getInventory()->UseSelectedQuickItem())
+    {
+        CurrentStamina += ManaAmount;
+    }
+
+    MyPlayerHUD->getInventory()->UseSelectedQuickItem();
+    // 限制蓝量不小于0
+    if (CurrentStamina < 0.0f)  CurrentStamina = 0.0f;
+
+    // 更新 UI
+    if (MyPlayerHUD)
+    {
+        MyPlayerHUD->UpdateMana(CurrentStamina, MaxStamina);
+    }
+}
+void AWukongCharacter::useItem()
+{
+    EItemType it = GetSelectedItemType();
+    switch (it)
+    {
+    case EItemType::HealthPotion:
+        increaseHealth(10.0);
+        break;
+
+    case EItemType::ManaPotion:
+        increaseMana(35.0);
+        break;
+
+    case EItemType::Other:
+    default:
+        break;
+    }
+}
+EItemType AWukongCharacter::GetSelectedItemType()
+{
+    if (!MyPlayerHUD->getInventory()) return EItemType::Other;
+
+    return MyPlayerHUD->getInventory()->GetSelectedItemType();
 }
