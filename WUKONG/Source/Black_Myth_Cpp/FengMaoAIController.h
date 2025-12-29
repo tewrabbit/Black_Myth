@@ -5,10 +5,6 @@
 #include "AIController.h"
 #include "FengMaoAIController.generated.h"
 
-/**
- * AI Controller for FengMao Enemy
- * Controls the AI behavior of the ParagonFengMao enemy character
- */
 UCLASS()
 class BLACK_MYTH_CPP_API AFengMaoAIController : public AAIController
 {

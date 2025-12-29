@@ -3,7 +3,6 @@
 
 #include "CoreMinimal.h"
 #include "ParagonFengMao.h"
-// 包含小怪头文件
 #include "ParagonNarbash.h"
 #include "ParagonRampage.h"
 #include "UObject/ConstructorHelpers.h"
@@ -27,10 +26,6 @@ enum class ESkillType : uint8
     Dark UMETA(DisplayName = "黑暗")
 };
 
-/**
- * Gideon Boss敌人类，继承自ParagonFengMao以复用所有AI逻辑
- * 特点：三阶段战斗、特殊技能、高血量
- */
 UCLASS()
 class BLACK_MYTH_CPP_API AParagonGideon : public AParagonFengMao
 {

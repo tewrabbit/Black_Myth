@@ -6,7 +6,7 @@
 #include "GameFramework/Character.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/DamageEvents.h"
-#include "FengMaoAIController.h"  // 修改这里
+#include "FengMaoAIController.h"  
 #include "Components/WidgetComponent.h"
 #include "ParagonFengMao.generated.h"
 
@@ -29,7 +29,6 @@ class BLACK_MYTH_CPP_API AParagonFengMao : public ACharacter
 	GENERATED_BODY()
 
 public:
-	// Sets default values for this character's properties
 	AParagonFengMao();
 
 	// 战斗系统
@@ -215,7 +214,7 @@ private:
 	FTimerHandle AutoDamageTestTimerHandle;   // 自动测试伤害定时器
 
 public:
-	// 召唤者引用（用于友方识别）
+	// 召唤者引用
 	AActor* Summoner;
 
 	// 允许AI控制器访问的目标玩家

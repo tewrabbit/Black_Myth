@@ -56,11 +56,6 @@ void AFengMaoAIController::OnPossess(APawn* InPawn)
 		UE_LOG(LogTemp, Warning, TEXT("🤖 感知组件: %s"), AIPerception ? TEXT("✅ 已初始化") : TEXT("❌ 未初始化"));
 		UE_LOG(LogTemp, Warning, TEXT("🤖 ==========================="));
 
-		// 可以在这里运行行为树
-		// if (BehaviorTree)
-		// {
-		//     RunBehaviorTree(BehaviorTree);
-		// }
 	}
 	else
 	{
