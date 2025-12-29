@@ -1,5 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
+﻿
 #include "ParagonFengMao.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -16,7 +15,6 @@
 // Sets default values
 AParagonFengMao::AParagonFengMao()
 {
-	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
 	// 初始化属性
@@ -345,7 +343,7 @@ void AParagonFengMao::GenerateDefaultPatrolPoints()
 
 		FVector PatrolPointLocation = BaseLocation + Offset;
 
-		// 使用ATargetPoint作为巡逻点（它有根组件，可以正确设置位置）
+		// 使用ATargetPoint作为巡逻点
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
@@ -468,9 +466,6 @@ void AParagonFengMao::Tick(float DeltaTime)
 		// 绘制到玩家的连线
 		DrawDebugLine(GetWorld(), GetActorLocation(), TargetPlayer->GetActorLocation(), FColor::Cyan, false, -1.f, 0, 1.f);
 	}
-
-	// 调试显示状态 - 删除，已经在前面显示了
-	// 不再需要额外的调试信息
 }
 
 // 验证AI状态的合理性
@@ -498,7 +493,6 @@ void AParagonFengMao::ValidateAIState()
 	}
 }
 
-// Called to bind functionality to input
 void AParagonFengMao::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
@@ -640,7 +634,7 @@ void AParagonFengMao::SetAIState(EFengMaoAIState NewState)
 	}
 }
 
-// 巡逻行为 - 完全重写，简化逻辑
+// 巡逻行为
 void AParagonFengMao::Patrol()
 {
 	if (!GetWorld() || bIsDead)
@@ -648,7 +642,6 @@ void AParagonFengMao::Patrol()
 		return;
 	}
 
-	// 如果没有AI控制器，使用简单的随机游走
 	if (!AIController)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ewolf 没有AI控制器，使用随机游走"));
@@ -664,7 +657,6 @@ void AParagonFengMao::Patrol()
 		return;
 	}
 
-	// 使用AI控制器进行巡逻
 	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
 	if (!NavSys)
 	{
@@ -730,18 +722,14 @@ void AParagonFengMao::Patrol()
 	else
 	{
 		// 检查移动状态，如果停止了就使用简单移动
-		// 使用更新的API检查移动状态而不是EPathFollowingStatus::Moving
 		bool bIsMoving = false;
 		if (AIController && AIController->GetPathFollowingComponent())
 		{
-			// 在UE5.7中使用正确的API检查移动状态
 			bIsMoving = AIController->GetPathFollowingComponent()->GetStatus() != EPathFollowingStatus::Idle;
 		}
 
 		if (!bIsMoving)
 		{
-			// 使用简单的移动方式（不依赖NavMesh）
-			// 确保速度被设置
 			if (GetCharacterMovement())
 			{
 				GetCharacterMovement()->MaxWalkSpeed = PatrolSpeed;
@@ -755,7 +743,7 @@ void AParagonFengMao::Patrol()
 				// 直接添加移动输入
 				AddMovementInput(Direction, 1.0f);
 
-				// 每秒只打印一次日志，避免刷屏
+				// 每秒打印一次日志
 				static float LastSimpleMoveLogTime = 0.f;
 				float CurrentTime = GetWorld()->GetTimeSeconds();
 				if (CurrentTime - LastSimpleMoveLogTime >= 2.0f)
@@ -767,7 +755,6 @@ void AParagonFengMao::Patrol()
 			}
 			else
 			{
-				// 到达目标，重置以获取新目标
 				CurrentPatrolDestination = FVector::ZeroVector;
 				UE_LOG(LogTemp, Warning, TEXT("ewolf ✅ 到达巡逻点（简单移动模式）"));
 			}
@@ -785,7 +772,7 @@ void AParagonFengMao::ChasePlayer()
 
 	float Distance = FVector::Distance(GetActorLocation(), TargetPlayer->GetActorLocation());
 
-	// 目标过远，放弃追逐 (保持原有逻辑)
+	// 目标过远，放弃追逐 
 	if (Distance > DetectionRange * 1.5f)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ewolf 目标过远 (%.1f米)，放弃追逐"), Distance);
@@ -794,7 +781,7 @@ void AParagonFengMao::ChasePlayer()
 		return;
 	}
 
-	// 进入攻击范围 (保持原有逻辑)
+	// 进入攻击范围 
 	if (Distance <= AttackRange)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ewolf 进入攻击范围 (%.1f米)"), Distance);
@@ -802,24 +789,20 @@ void AParagonFengMao::ChasePlayer()
 		return;
 	}
 
-	// 尝试使用技能 (保持原有逻辑)
+	// 尝试使用技能 
 	if (!bIsUsingSkill)
 	{
 		TryUseSkill();
 	}
 
-	// ----------------------------------------------------
-	// 👇 核心修改：统一使用简单移动逻辑 (因为没有NavMesh)
-	// ----------------------------------------------------
 	if (!bIsUsingSkill && GetCharacterMovement())
 	{
-		// 1. 确保设置追逐速度 (速度应为 400)
+		// 1. 确保设置追逐速度
 		GetCharacterMovement()->MaxWalkSpeed = ChaseSpeed;
 
 		// 2. 计算方向并进行移动
 		FVector Direction = (TargetPlayer->GetActorLocation() - GetActorLocation()).GetSafeNormal();
 
-		// 停止AIController正在进行的MoveTo操作（以防万一）
 		if (AIController)
 		{
 			AIController->StopMovement();
@@ -828,7 +811,7 @@ void AParagonFengMao::ChasePlayer()
 		// 直接使用AddMovementInput驱动移动
 		AddMovementInput(Direction, 1.0f);
 
-		// 调试日志 (避免刷屏)
+		// 调试日志 
 		static float LastSimpleMoveLogTime = 0.f;
 		float CurrentTime = GetWorld()->GetTimeSeconds();
 		if (CurrentTime - LastSimpleMoveLogTime >= 2.0f)
@@ -838,14 +821,10 @@ void AParagonFengMao::ChasePlayer()
 				Distance, GetCharacterMovement()->MaxWalkSpeed);
 		}
 	}
-	// ----------------------------------------------------
-
 	// 面向目标 (保持原有逻辑)
 	FaceTarget(TargetPlayer, GetWorld()->GetDeltaSeconds());
 }
 
-// 注意: FaceTarget() 函数未在提供的代码中，假设它用于旋转角色。
-// 攻击玩家 - 添加重击逻辑
 void AParagonFengMao::AttackPlayer()
 {
 	if (!TargetPlayer || bIsDead)
@@ -905,7 +884,7 @@ void AParagonFengMao::AttackPlayer()
 	}
 }
 
-// 尝试使用技能 - 优化
+// 尝试使用攻击2
 void AParagonFengMao::TryUseSkill()
 {
 	if (!TargetPlayer || bIsDead || bIsUsingSkill)
@@ -921,7 +900,7 @@ void AParagonFengMao::TryUseSkill()
 
 	float Distance = FVector::Distance(GetActorLocation(), TargetPlayer->GetActorLocation());
 
-	// 只有在中等距离时才使用技能
+	// 只有在中等距离时才使用
 	if (Distance > AttackRange * 1.2f && Distance <= SkillRange)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ewolf 使用技能：冲刺！距离: %.1f米"), Distance);
@@ -930,7 +909,7 @@ void AParagonFengMao::TryUseSkill()
 	}
 }
 
-// 冲刺技能 - 优化
+// 攻击2技能
 void AParagonFengMao::DashToTargetAndStrike()
 {
 	if (!TargetPlayer)
@@ -975,7 +954,7 @@ void AParagonFengMao::DashToTargetAndStrike()
 	GetWorldTimerManager().SetTimer(SkillTimerHandle, this, &AParagonFengMao::FinishDash, DashDuration, false);
 }
 
-// 结束冲刺 - 优化
+// 结束冲刺
 void AParagonFengMao::FinishDash()
 {
 	bIsUsingSkill = false;
@@ -1015,7 +994,7 @@ void AParagonFengMao::FinishDash()
 	}
 }
 
-// 执行攻击 - 优化版本
+// 执行攻击
 void AParagonFengMao::PerformAttack()
 {
 	if (!TargetPlayer)

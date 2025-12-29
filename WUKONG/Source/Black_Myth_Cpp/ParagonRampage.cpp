@@ -6,15 +6,15 @@ AParagonRampage::AParagonRampage()
 {
 
     // 中等血量
-    MaxHealth = 225.f;  // ParagonFengMao为150.f, ParagonNarbash为300.f
+    MaxHealth = 225.f; 
 
     // 中等攻击力
-    AttackDamage = 20.f; // ParagonFengMao为25.f, ParagonNarbash为15.f
-    HeavyAttackDamage = 40.f; // ParagonFengMao为50.f, ParagonNarbash为30.f
+    AttackDamage = 20.f; 
+    HeavyAttackDamage = 40.f; 
 
     // 中等移动速度
-    PatrolSpeed = 250.f;  // ParagonFengMao为300.f, ParagonNarbash为200.f
-    ChaseSpeed = 500.f;   // ParagonFengMao为600.f, ParagonNarbash为400.f
+    PatrolSpeed = 250.f; 
+    ChaseSpeed = 500.f;  
 
 
 
@@ -40,9 +40,6 @@ AParagonRampage::AParagonRampage()
 
 void AParagonRampage::BeginPlay()
 {
-    // 调用父类的BeginPlay
     Super::BeginPlay();
-
-    // 添加Rampage特有的初始化逻辑
     UE_LOG(LogTemp, Warning, TEXT("🐺 Rampage Enemy BeginPlay"));
 }

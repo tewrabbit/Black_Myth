@@ -10,28 +10,25 @@
 #include "Engine/EngineTypes.h"
 #include "CollisionQueryParams.h"
 #include "TimerManager.h"
-// 包含小怪头文件
 #include "ParagonNarbash.h"
 #include "ParagonRampage.h"
 #include "BoWidget.h"
 
 AParagonGideon::AParagonGideon()
 {
-    // 设置Boss默认值，继承自ParagonFengMao但具有Boss特性
-
-    // 高血量设计（符合Boss定位）
-    MaxHealth = 800.f;  // 远高于普通敌人
+    // 高血量设计
+    MaxHealth = 800.f; 
     CurrentHealth = MaxHealth;
 
-    // 攻击力随阶段提升（设置近战攻击伤害为4）
-    MeleeAttackDamage = 4.f;  // 近战攻击伤害
-    SkillDamage = 5.f;   // 仅降低特效伤害
+    // 攻击力随阶段提升
+    MeleeAttackDamage = 4.f; 
+    SkillDamage = 5.f;  
 
     // 调整索敌和攻击范围
     DetectionRange = 1500.f;  // 索敌范围
     AttackRange = 600.f;      // 攻击范围
 
-    // 移动速度适中（Boss不应过于敏捷）
+    // 移动速度适中
     PatrolSpeed = 280.f;
     ChaseSpeed = 450.f;
 
@@ -41,15 +38,15 @@ AParagonGideon::AParagonGideon()
 
     // 特殊技能参数
     SpecialAbilityCooldown = 15.f; // 特殊技能15秒冷却
-    ShieldDuration = 10.f;         // 护盾持续10秒
-    MinionsToSummon = 3;           // 每次召唤3个小怪
+    ShieldDuration = 10.f;     
+    MinionsToSummon = 3;       
 
     // 初始化状态
     bHasShield = false;
     bIsEnraged = false;
 
-    // 初始化Gideon专用攻击冷却时间（普通模式下更长，狂暴模式下为2.0秒）
-    GideonAttackCooldown = 2.5f;  // 普通模式攻击冷却时间（加快0.5秒）
+    // 初始化Gideon专用攻击冷却时间
+    GideonAttackCooldown = 2.5f; 
 
     // 初始化上次攻击时间
     LastGideonAttackTime = 0.0f;
@@ -57,20 +54,16 @@ AParagonGideon::AParagonGideon()
     // 初始化动画同步参数
     AttackEffectDelay = 0.5f;  // 攻击特效延迟时间
     DamageDelay = 0.5f;        // 伤害延迟时间
-
-    // 调整特效生成延迟，使其与攻击冷却同步并下降0.5s
-    float EffectSpawnDelay = 0.4f;  // 特效生成延迟时间（最大延迟时间）
+    float EffectSpawnDelay = 0.4f;  // 特效生成延迟时间
 
     // 初始化伤害间隔控制
-    LastEffectDamageTime = 0.0f;  // 上次特效伤害时间
-    EffectDamageInterval = 0.3f;  // 特效伤害间隔（每0.3秒造成一次伤害）
+    LastEffectDamageTime = 0.0f;
+    EffectDamageInterval = 0.3f;  
 
     // 初始化持续伤害控制
     MaxContinuousDamageTicks = 15;  // 最大持续伤害次数（2.25秒/0.15秒间隔）
     CurrentContinuousDamageTicks = 0;
-
-    // 调整持续伤害间隔，使其同步并下降约0.5s
-    float ContinuousDamageInterval = 0.15f;  // 持续伤害间隔时间
+    float ContinuousDamageInterval = 0.15f;  
 
     // 加载Gideon特有的动画资源
     static ConstructorHelpers::FObjectFinder<UAnimMontage> GideonAttackAMontageObj(
@@ -241,7 +234,7 @@ void AParagonGideon::BeginPlay()
 
         if (BoosHealthBarWidget)
         {
-            // 2. 添加到视口 (ZOrder 设大一点防止被其他 UI 遮挡)
+            // 2. 添加到视口 
             BoosHealthBarWidget->AddToViewport(9999);
 
             // 3. 传递引用
@@ -328,8 +321,6 @@ void AParagonGideon::AttackPlayer()
     // 记录攻击行为
     UE_LOG(LogTemp, Warning, TEXT("👹 Gideon执行攻击行为，当前阶段: %d"), static_cast<int32>(CurrentPhase));
 
-    // 调用父类的攻击逻辑，但我们需要完全重写这个函数
-    // 检查目标和死亡状态
     if (!TargetPlayer || bIsDead)
     {
         SetAIState(EFengMaoAIState::Patrol);
@@ -362,10 +353,6 @@ void AParagonGideon::AttackPlayer()
     // 面向玩家
     FaceTarget(TargetPlayer, GetWorld()->GetDeltaSeconds());
 
-    // 保持移动能力（攻击时不完全停止移动）
-    // 根据距离调整移动策略
-    // 保持移动能力（攻击时不完全停止移动）
-    // 根据距离调整移动策略
     if (GetCharacterMovement())
     {
         // 设置攻击时的移动速度
@@ -408,11 +395,11 @@ void AParagonGideon::AttackPlayer()
         }
     }
 
-    // 检查攻击冷却（使用成员变量来跟踪）
+    // 检查攻击冷却
     float CurrentTime = GetWorld()->GetTimeSeconds();
     float TimeSinceLastAttack = CurrentTime - LastGideonAttackTime;
 
-    // 10%概率进行随机移动（增加行为多样性）
+    // 10%概率进行随机移动
     static float LastRandomMoveTime = 0.f;
 
     if (FMath::FRand() < 0.1f && CurrentTime - LastRandomMoveTime >= 0.2f) // 添加轻微冷却时间以减少抽搐
@@ -431,7 +418,7 @@ void AParagonGideon::AttackPlayer()
         }
     }
 
-    // 5%概率进行环绕移动（围绕玩家）
+    // 5%概率进行环绕移动
     static float LastCircleMoveTime = 0.f;
 
     if (FMath::FRand() < 0.05f && CurrentTime - LastCircleMoveTime >= 0.3f) // 添加轻微冷却时间以减少抽搐
@@ -638,7 +625,6 @@ void AParagonGideon::AttackPlayer()
         FTimerHandle AttackResetHandle;
         GetWorldTimerManager().SetTimer(AttackResetHandle, [this]()
             {
-                // 这里我们不需要重置bIsAttacking，因为我们没有使用它
             }, 0.5f, false);
     }
 }
@@ -865,7 +851,7 @@ void AParagonGideon::ApplyAttackEffectDamage(ESkillType SkillType, FVector Locat
     {
         UE_LOG(LogTemp, Warning, TEXT("👹 Gideon检测到%d个命中目标"), HitResults.Num());
 
-        // 用于跟踪已经受伤的Actor，避免同一Actor在同一 tick 内多次受伤
+        //避免同一Actor在同一 tick 内多次受伤
         TSet<AActor*> DamagedActors;
         int32 AppliedDamageCount = 0;  // 记录实际造成伤害的次数
 
@@ -1014,7 +1000,6 @@ void AParagonGideon::SummonMinions()
             // 削弱小怪能力（降至50%）
             Minion->MaxHealth *= 0.5f;
             Minion->CurrentHealth = Minion->MaxHealth;
-            // 保持小怪原有的攻击伤害设定，不使用Boss的伤害值
             Minion->AttackDamage = 25.f * 0.5f;  // 普通攻击伤害削弱至50%
             Minion->HeavyAttackDamage = 50.f * 0.5f;  // 重击伤害削弱至50%
             Minion->PatrolSpeed *= 0.7f;
@@ -1047,7 +1032,6 @@ void AParagonGideon::ActivateShield()
     bHasShield = true;
     UE_LOG(LogTemp, Warning, TEXT("👹 Gideon激活护盾！"));
 
-    // 启动护盾定时器
     if (GetWorld())
     {
         GetWorldTimerManager().SetTimer(ShieldTimerHandle, this, &AParagonGideon::DeactivateShield, ShieldDuration, false);
@@ -1072,15 +1056,14 @@ void AParagonGideon::EnterEnrageMode()
     ChaseSpeed *= 0.9f;
 
     // 狂暴状态下加快攻击速度
-    GideonAttackCooldown = 2.0f;  // 狂暴模式攻击冷却时间（加快0.5秒）
+    GideonAttackCooldown = 2.0f;  // 狂暴模式攻击冷却时间
 
     // 狂暴状态持续一段时间后自动解除
     if (GetWorld())
     {
         GetWorldTimerManager().SetTimer(EnrageTimerHandle, [this]() {
             bIsEnraged = false;
-            // 恢复普通模式的攻击冷却时间
-            GideonAttackCooldown = 2.5f;  // 普通模式攻击冷却时间（加快0.5秒）
+            GideonAttackCooldown = 2.5f;  // 普通模式攻击冷却时间
             UE_LOG(LogTemp, Warning, TEXT("👹👹 Gideon狂暴状态结束"));
             }, 20.0f, false);
     }
@@ -1128,5 +1111,5 @@ void AParagonGideon::Die()
 
 FVector AParagonGideon::GetBossLocation() const
 {
-    return GetActorLocation(); // 返回 Boss 的位置
+    return GetActorLocation(); 
 }
